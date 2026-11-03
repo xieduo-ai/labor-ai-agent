@@ -1,10 +1,40 @@
 {"qid": 1, "question": "我在公司干了三年被裁，工资一万二，能拿多少钱走人？", "gold_articles": ["中华人民共和国劳动合同法#第四十七条"], "category": "经济补偿", "difficulty": "难"}
 {"qid": 2, "question": "老板说试用期只给两千块生活费，行不行？", "gold_articles": ["中华人民共和国劳动合同法#第二十条", "最低工资规定#第十二条"], "category": "试用期", "difficulty": "难"}
-{"qid": 3, "question": "怀孕了公司想让我自己辞职，我不同意的话他们能直接开除我吗？", "gold_articles": ["中华人民共和国劳动合同法#第四十二条","女职工劳动保护特别规定#第五条"], "category": "女工与医疗期", "difficulty": "难"}
-{"qid": 4, "question": "公司搞末位淘汰把我辞了，这算违法解除吗？", "gold_articles": ["中华人民共和国劳动合同法#第八十七条", "中华人民共和国劳动合同法#第四十条","最高人民法院关于审理劳动争议案件适用法律问题的解释（二）#第十八条"], "category": "解除终止", "difficulty": "难"}
+{"qid": 3, "question": "怀孕了公司想让我自己辞职，我不同意的话他们能直接开除我吗？", "gold_articles": ["中华人民共和国劳动合同法#第四十二条", "女职工劳动保护特别规定#第五条"], "category": "女工与医疗期", "difficulty": "难"}
+{"qid": 4, "question": "公司搞末位淘汰把我辞了，这算违法解除吗？", "gold_articles": ["中华人民共和国劳动合同法#第八十七条", "中华人民共和国劳动合同法#第四十条", "最高人民法院关于审理劳动争议案件适用法律问题的解释（二）#第十八条"], "category": "解除终止", "difficulty": "难"}
 {"qid": 5, "question": "我签的是三年合同，公司给我定六个月试用期，合理吗？", "gold_articles": ["中华人民共和国劳动合同法#第十九条"], "category": "试用期", "difficulty": "难"}
 {"qid": 6, "question": "上个月加班费按一倍半给我算的，对不对？", "gold_articles": ["中华人民共和国劳动法#第四十四条"], "category": "工时加班", "difficulty": "难"}
 {"qid": 7, "question": "老板说这个月效益不好先不发工资，等我走了再结，可以吗？", "gold_articles": ["工资支付暂行规定#第十八条", "中华人民共和国劳动法#第五十条"], "category": "薪酬", "difficulty": "难"}
 {"qid": 8, "question": "仲裁时效从哪天开始算？我离职半年了还能告吗？", "gold_articles": ["中华人民共和国劳动争议调解仲裁法#第二十七条"], "category": "程序", "difficulty": "难"}
 {"qid": 9, "question": "公司把我调到外地分公司，我不去就按旷工开除，合法吗？", "gold_articles": ["中华人民共和国劳动合同法#第三十五条"], "category": "解除终止", "difficulty": "难"}
 {"qid": 10, "question": "工伤期间公司停发工资，说等鉴定完一起补，行吗？", "gold_articles": ["工伤保险条例#第三十三条"], "category": "工伤", "difficulty": "难"}
+{"qid": 11, "question": "公司说试用期三个月，到期又让我再试用三个月，能这样吗？", "gold_articles": ["中华人民共和国劳动合同法#第十九条"], "category": "试用期", "difficulty": "难"}
+{"qid": 12, "question": "试用期内公司能随便把我辞了吗？", "gold_articles": ["中华人民共和国劳动合同法#第二十一条"], "category": "试用期", "difficulty": "难"}
+{"qid": 13, "question": "公司不给我交社保，说把钱折成工资发给我，行吗？", "gold_articles": ["中华人民共和国社会保险法#第五十八条", "中华人民共和国劳动合同法#第二十六条"], "category": "社保", "difficulty": "难"}
+{"qid": 14, "question": "上班路上被车撞了，算工伤吗？", "gold_articles": ["工伤保险条例#第十四条"], "category": "工伤", "difficulty": "难"}
+{"qid": 15, "question": "工伤后公司想私了两万块了事，我到底该拿多少？", "gold_articles": ["工伤保险条例#第三十七条"], "category": "工伤", "difficulty": "难"}
+{"qid": 16, "question": "公司让我签空白合同，说回头再填，合法吗？", "gold_articles": ["中华人民共和国劳动合同法#第十六条"], "category": "订立", "difficulty": "难"}
+{"qid": 17, "question": "合同到期公司不跟我续签，有补偿吗？", "gold_articles": ["中华人民共和国劳动合同法#第四十六条"], "category": "解除终止", "difficulty": "难"}
+{"qid": 18, "question": "公司搬到外省去了，我不跟着去，有补偿吗？", "gold_articles": ["中华人民共和国劳动合同法#第四十条", "中华人民共和国劳动合同法#第四十六条"], "category": "解除终止", "difficulty": "难"}
+{"qid": 19, "question": "公司劝我走，让我自己写辞职信，这里面有什么坑？", "gold_articles": ["中华人民共和国劳动合同法#第三十七条", "中华人民共和国劳动合同法#第四十六条"], "category": "解除终止", "difficulty": "难"}
+{"qid": 20, "question": "加班到晚上十点，公司只给十块钱餐补，行吗？", "gold_articles": ["中华人民共和国劳动法#第四十四条"], "category": "工时加班", "difficulty": "难"}
+{"qid": 21, "question": "法定节假日上班，工资到底怎么算？", "gold_articles": ["中华人民共和国劳动法#第四十四条"], "category": "工时加班", "difficulty": "难"}
+{"qid": 22, "question": "公司搞大小周，一周只休一天，合法吗？", "gold_articles": ["中华人民共和国劳动法#第三十八条"], "category": "工时加班", "difficulty": "难"}
+{"qid": 23, "question": "公司押我一个月工资，说怕我跑，违法吗？", "gold_articles": ["中华人民共和国劳动法#第五十条"], "category": "薪酬", "difficulty": "难"}
+{"qid": 24, "question": "离职时公司扣着我最后一个月工资不给，怎么办？", "gold_articles": ["工资支付暂行规定#第九条"], "category": "薪酬", "difficulty": "难"}
+{"qid": 25, "question": "竞业限制的补偿一般给多少？", "gold_articles": ["中华人民共和国劳动合同法#第二十三条"], "category": "竞业保密", "difficulty": "难"}
+{"qid": 26, "question": "公司让我签保密协议但一分钱不给，这协议有效吗？", "gold_articles": ["中华人民共和国劳动合同法#第二十三条"], "category": "竞业保密", "difficulty": "难"}
+{"qid": 27, "question": "年假没休完，公司要不要给我三倍工资？", "gold_articles": ["职工带薪年休假条例#第五条"], "category": "休假", "difficulty": "难"}
+{"qid": 28, "question": "公司规定年假必须当年休完，过期作废，行吗？", "gold_articles": ["职工带薪年休假条例#第五条"], "category": "休假", "difficulty": "难"}
+{"qid": 29, "question": "怀孕七个月了公司还安排我上夜班，我可以拒绝吗？", "gold_articles": ["中华人民共和国劳动法#第六十一条"], "category": "女工与医疗期", "difficulty": "难"}
+{"qid": 30, "question": "哺乳期每天有一小时喂奶时间吗？", "gold_articles": ["女职工劳动保护特别规定#第九条"], "category": "女工与医疗期", "difficulty": "难"}
+{"qid": 31, "question": "公司不给开离职证明，害我新工作黄了，能索赔吗？", "gold_articles": ["中华人民共和国劳动合同法#第五十条", "中华人民共和国劳动合同法#第八十九条"], "category": "解除终止", "difficulty": "难"}
+{"qid": 32, "question": "被拖欠工资，我能直接去法院告吗？", "gold_articles": ["中华人民共和国劳动合同法#第三十条"], "category": "程序", "difficulty": "难"}
+{"qid": 33, "question": "申请劳动仲裁要交钱吗？", "gold_articles": ["中华人民共和国劳动争议调解仲裁法#第五十三条"], "category": "程序", "difficulty": "难"}
+{"qid": 34, "question": "公司让我注册成个体户再签合作协议，这还算员工吗？", "gold_articles": ["中华人民共和国劳动合同法#第七条"], "category": "其他", "difficulty": "难"}
+{"qid": 35, "question": "公司规定迟到一次罚两百，合法吗？", "gold_articles": ["工资支付暂行规定#第十五条"], "category": "薪酬", "difficulty": "难"}
+{"qid": 36, "question": "我想离职，要提前多久跟公司说？", "gold_articles": ["中华人民共和国劳动合同法#第三十七条"], "category": "解除终止", "difficulty": "难"}
+{"qid": 37, "question": "签了无固定期限合同，公司是不是就不能辞退我了？", "gold_articles": ["中华人民共和国劳动合同法#第十四条"], "category": "订立", "difficulty": "难"}
+{"qid": 38, "question": "病假期间工资怎么算，公司能只发最低工资吗？", "gold_articles": ["企业职工患病或非因工负伤医疗期规定#第五条"], "category": "女工与医疗期", "difficulty": "难"}
+{"qid": 39, "question": "公司故意不给我安排工作，逼我自己走，我能要补偿吗？", "gold_articles": ["中华人民共和国劳动合同法#第三十八条"], "category": "解除终止", "difficulty": "难"}
+{"qid": 40, "question": "在湖北工伤，单位拖着不申报，我自己去申报有时间限制吗？", "gold_articles": ["湖北省工伤保险实施办法#第十三条"], "category": "工伤", "difficulty": "难"}
