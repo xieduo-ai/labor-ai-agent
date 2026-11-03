@@ -1,0 +1,23 @@
+{"qid": 1, "question": "试用期最长可以约定多久？", "gold_articles": ["中华人民共和国劳动合同法#第十九条"], "category": "试用期", "difficulty": "易"}
+{"qid": 2, "question": "试用期工资最低能给多少，可以低于当地最低工资吗？", "gold_articles": ["中华人民共和国劳动合同法#第二十条", "最低工资规定#第十二条"], "category": "试用期", "difficulty": "中"}
+{"qid": 3, "question": "入职两个月了公司还没跟我签书面劳动合同，能要二倍工资吗？", "gold_articles": ["中华人民共和国劳动合同法#第八十二条"], "category": "订立", "difficulty": "中"}
+{"qid": 4, "question": "已经签了两次固定期限合同，第三次公司是不是必须签无固定期限？", "gold_articles": ["中华人民共和国劳动合同法#第十四条"], "category": "订立", "difficulty": "中"}
+{"qid": 5, "question": "被公司辞退，经济补偿金怎么算，最多算多少年？", "gold_articles": ["中华人民共和国劳动合同法#第四十七条"], "category": "经济补偿", "difficulty": "易"}
+{"qid": 6, "question": "公司违法把我开除，赔偿金是几倍工资？", "gold_articles": ["中华人民共和国劳动合同法#第八十七条"], "category": "解除终止", "difficulty": "易"}
+{"qid": 7, "question": "公司没有提前三十天通知就让我走人，是不是要多给一个月工资？", "gold_articles": ["中华人民共和国劳动合同法#第四十条"], "category": "解除终止", "difficulty": "中"}
+{"qid": 8, "question": "员工严重违反公司规章制度被辞退，还要给经济补偿吗？", "gold_articles": ["中华人民共和国劳动合同法#第三十九条", "中华人民共和国劳动合同法#第四十六条"], "category": "解除终止", "difficulty": "易"}
+{"qid": 9, "question": "公司让我周末加班但不给加班费，合法吗？", "gold_articles": ["中华人民共和国劳动法#第四十四条"], "category": "工时加班", "difficulty": "易"}
+{"qid": 10, "question": "公司天天安排加班，一个月最多能加多少小时？", "gold_articles": ["中华人民共和国劳动法#第四十一条"], "category": "工时加班", "difficulty": "中"}
+{"qid": 11, "question": "公司拖欠工资三个月不给，除了补发还能要赔偿金吗？", "gold_articles": ["工资支付暂行规定#第十八条"], "category": "薪酬", "difficulty": "中"}
+{"qid": 12, "question": "竞业限制最多能签几年？", "gold_articles": ["中华人民共和国劳动合同法#第二十四条"], "category": "竞业保密", "difficulty": "易"}
+{"qid": 13, "question": "签了竞业限制但公司一直不给补偿，我还需要遵守吗？", "gold_articles": ["中华人民共和国劳动合同法#第二十三条"], "category": "竞业保密", "difficulty": "中"}
+{"qid": 14, "question": "劳动合同里写「提前离职赔五万违约金」，这种条款有效吗？", "gold_articles": ["中华人民共和国劳动合同法#第二十五条"], "category": "违约金", "difficulty": "中"}
+{"qid": 15, "question": "出了工伤，单位要在多久之内去申请工伤认定？", "gold_articles": ["工伤保险条例#第十七条"], "category": "工伤", "difficulty": "易"}
+{"qid": 16, "question": "工伤治疗休息期间，工资按什么标准发？", "gold_articles": ["工伤保险条例#第三十三条"], "category": "工伤", "difficulty": "中"}
+{"qid": 17, "question": "生病需要长期请假，医疗期最长能有多久？", "gold_articles": ["企业职工患病或非因工负伤医疗期规定#第三条"], "category": "女工与医疗期", "difficulty": "中"}
+{"qid": 18, "question": "工作满三年，年休假有几天？", "gold_articles": ["职工带薪年休假条例#第三条"], "category": "休假", "difficulty": "易"}
+{"qid": 19, "question": "产假有多少天，难产会加吗？", "gold_articles": ["女职工劳动保护特别规定#第七条"], "category": "女工与医疗期", "difficulty": "易"}
+{"qid": 20, "question": "申请劳动仲裁的时效是多久？", "gold_articles": ["中华人民共和国劳动争议调解仲裁法#第二十七条"], "category": "程序", "difficulty": "易"}
+{"qid": 21, "question": "在湖北出了工伤，单位要在多少天内申报？", "gold_articles": ["湖北省工伤保险实施办法#第十三条"], "category": "工伤", "difficulty": "中"}
+{"qid": 22, "question": "公司阻挠员工组建工会，违法吗？", "gold_articles": ["中华人民共和国工会法#第五十一条"], "category": "其他", "difficulty": "中"}
+{"qid": 23, "question": "公司让员工签「自愿放弃缴纳社保」的协议，有效吗？", "gold_articles": ["中华人民共和国社会保险法#第五十八条", "中华人民共和国劳动合同法#第二十六条"], "category": "社保", "difficulty": "中"}

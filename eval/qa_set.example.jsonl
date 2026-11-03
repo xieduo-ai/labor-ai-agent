@@ -1,0 +1,6 @@
+{"qid": 1, "question": "试用期最长可以约定多久？", "gold_articles": ["中华人民共和国劳动合同法#第十九条"], "category": "试用期", "difficulty": "易"}
+{"qid": 2, "question": "员工严重违反规章制度，公司解除合同要给补偿吗？", "gold_articles": ["中华人民共和国劳动合同法#第三十九条", "中华人民共和国劳动合同法#第四十六条"], "category": "解除终止", "difficulty": "易"}
+{"qid": 3, "question": "公司没有提前30天通知就让我走人，要赔多少？", "gold_articles": ["中华人民共和国劳动合同法#第四十条", "中华人民共和国劳动合同法#第八十七条"], "category": "解除终止", "difficulty": "中"}
+{"qid": 4, "question": "入职一个月了还没签书面劳动合同，公司要承担什么责任？", "gold_articles": ["中华人民共和国劳动合同法#第八十二条", "中华人民共和国劳动合同法#第十条"], "category": "订立", "difficulty": "中"}
+{"qid": 5, "question": "经济补偿金按什么标准算，最多算多少年？", "gold_articles": ["中华人民共和国劳动合同法#第四十七条"], "category": "经济补偿", "difficulty": "易"}
+{"qid": 6, "question": "女职工产假有多少天，难产会加吗？", "gold_articles": ["女职工劳动保护特别规定#第七条"], "category": "女工保护", "difficulty": "易"}

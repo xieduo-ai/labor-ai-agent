@@ -1,0 +1,10 @@
+{"qid": 1, "question": "我在公司干了三年被裁，工资一万二，能拿多少钱走人？", "gold_articles": ["中华人民共和国劳动合同法#第四十七条"], "category": "经济补偿", "difficulty": "难"}
+{"qid": 2, "question": "老板说试用期只给两千块生活费，行不行？", "gold_articles": ["中华人民共和国劳动合同法#第二十条", "最低工资规定#第十二条"], "category": "试用期", "difficulty": "难"}
+{"qid": 3, "question": "怀孕了公司想让我自己辞职，我不同意的话他们能直接开除我吗？", "gold_articles": ["中华人民共和国劳动合同法#第四十二条","女职工劳动保护特别规定#第五条"], "category": "女工与医疗期", "difficulty": "难"}
+{"qid": 4, "question": "公司搞末位淘汰把我辞了，这算违法解除吗？", "gold_articles": ["中华人民共和国劳动合同法#第八十七条", "中华人民共和国劳动合同法#第四十条","最高人民法院关于审理劳动争议案件适用法律问题的解释（二）#第十八条"], "category": "解除终止", "difficulty": "难"}
+{"qid": 5, "question": "我签的是三年合同，公司给我定六个月试用期，合理吗？", "gold_articles": ["中华人民共和国劳动合同法#第十九条"], "category": "试用期", "difficulty": "难"}
+{"qid": 6, "question": "上个月加班费按一倍半给我算的，对不对？", "gold_articles": ["中华人民共和国劳动法#第四十四条"], "category": "工时加班", "difficulty": "难"}
+{"qid": 7, "question": "老板说这个月效益不好先不发工资，等我走了再结，可以吗？", "gold_articles": ["工资支付暂行规定#第十八条", "中华人民共和国劳动法#第五十条"], "category": "薪酬", "difficulty": "难"}
+{"qid": 8, "question": "仲裁时效从哪天开始算？我离职半年了还能告吗？", "gold_articles": ["中华人民共和国劳动争议调解仲裁法#第二十七条"], "category": "程序", "difficulty": "难"}
+{"qid": 9, "question": "公司把我调到外地分公司，我不去就按旷工开除，合法吗？", "gold_articles": ["中华人民共和国劳动合同法#第三十五条"], "category": "解除终止", "difficulty": "难"}
+{"qid": 10, "question": "工伤期间公司停发工资，说等鉴定完一起补，行吗？", "gold_articles": ["工伤保险条例#第三十三条"], "category": "工伤", "difficulty": "难"}
