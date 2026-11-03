@@ -87,12 +87,15 @@ def search(query: str, top_k: int = 6, recall_k: int = 20):
     bm_idx = np.argsort(-scores)[:recall_k].tolist()
 
     # 3) RRF 融合（k=60 是论文里的经验值）
+    #    加权：实测纯 BM25 只有 42.5%、纯向量 72.5%，等权融合会把弱信号灌进来
+    #    （等权时混合反而降到 52.5%）。所以向量权重高、BM25 只做补充。
     K = 60
+    VEC_W, BM_W = 0.8, 0.2
     fused = {}
     for rank, i in enumerate(vec_idx):
-        fused[i] = fused.get(i, 0.0) + 1.0 / (K + rank + 1)
+        fused[i] = fused.get(i, 0.0) + VEC_W / (K + rank + 1)
     for rank, i in enumerate(bm_idx):
-        fused[i] = fused.get(i, 0.0) + 1.0 / (K + rank + 1)
+        fused[i] = fused.get(i, 0.0) + BM_W / (K + rank + 1)
     cand = sorted(fused, key=lambda x: -fused[x])[:recall_k]
 
     # 4) 重排

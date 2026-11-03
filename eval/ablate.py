@@ -4,7 +4,8 @@
 「我用了 RAG」有说服力得多。
 
 用法：
-    python eval/ablate.py
+    python eval/ablate.py                      # 默认用 40 题口语化集
+    python eval/ablate.py eval/qa_set.jsonl    # 指定评测集
 """
 import json
 import sys
@@ -12,17 +13,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import jieba  # noqa: E402
 import numpy as np  # noqa: E402
 
 import config  # noqa: E402
 from src.llm import embed  # noqa: E402
-from src.retrieve import _load, search  # noqa: E402
+from src.retrieve import _load, expand, search  # noqa: E402
+from src.tokenize import cut  # noqa: E402
 
 
 def vec_only(q, k=5):
     c = _load()
-    qv = np.asarray(embed([q])[0], dtype="float32")
+    qv = np.asarray(embed([expand(q)])[0], dtype="float32")
     qv /= np.linalg.norm(qv) + 1e-9
     idx = np.argsort(-(c["emb"] @ qv))[:k]
     return [c["chunks"][i] for i in idx]
@@ -30,7 +31,7 @@ def vec_only(q, k=5):
 
 def bm25_only(q, k=5):
     c = _load()
-    scores = c["bm25"].get_scores(list(jieba.cut(q)))
+    scores = c["bm25"].get_scores(cut(expand(q)))
     idx = np.argsort(-scores)[:k]
     return [c["chunks"][i] for i in idx]
 
@@ -49,7 +50,12 @@ def hybrid_rerank(q, k=5):
 
 
 def main(k=5):
-    path = config.EVAL_DIR / "qa_set.jsonl"
+    if len(sys.argv) > 1:
+        path = Path(sys.argv[1])
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[1] / path
+    else:
+        path = config.EVAL_DIR / "qa_set.hard.jsonl"
     rows = [json.loads(ln) for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
     modes = {
@@ -59,14 +65,17 @@ def main(k=5):
         "④ 混合 + 重排": hybrid_rerank,
     }
 
-    print(f"评测集 {len(rows)} 题，指标 Recall@{k}\n")
+    print(f"评测集 {path.name}（{len(rows)} 题），指标 Recall@{k}\n")
+    results = {}
     for name, fn in modes.items():
         hit = 0
         for r in rows:
             got = {(h["law_name"], h["article_no"]) for h in fn(r["question"], k)}
             gold = {tuple(g.split("#", 1)) for g in r["gold_articles"]}
             hit += bool(got & gold)
-        print(f"  {name:<14} {hit / len(rows):>6.1%}")
+        results[name] = hit
+        print(f"  {name:<14} {hit}/{len(rows)} = {hit / len(rows):>6.1%}")
+    return results
 
 
 if __name__ == "__main__":
