@@ -1,5 +1,7 @@
 # 用工合规 AI Agent
 
+> **在线 Demo**：<https://labor-ai-agent-4k7w5pjajymvfswvcdwkwkd.streamlit.app/>
+
 > 上传一份劳动合同，逐条给出风险等级、法条依据和修改建议；同时支持带引用的劳动法问答。
 
 面向中小企业的用工合规助手。核心是一条 **「按条切分 → BM25 + 向量混合检索 → RRF 融合 → Cross-Encoder 重排 → 强制引用生成」** 的 RAG pipeline，外加一套自建的劳动法评测集。
