@@ -1,6 +1,6 @@
 # 用工合规 AI Agent
 
-> **在线 Demo**：<https://labor-ai-agent-4k7w5pjajymvfswvcdwkwkd.streamlit.app/>
+> **在线 Demo**：<https://labor-ai-agent-4k7w5pjajymvfswvcdwkwd.streamlit.app/>
 
 > 上传一份劳动合同，逐条给出风险等级、法条依据和修改建议；同时支持带引用的劳动法问答。
 
