@@ -4,6 +4,7 @@
     streamlit run app.py
 """
 import os
+from pathlib import Path
 
 import streamlit as st
 
@@ -16,35 +17,85 @@ except Exception:  # noqa: BLE001
     pass
 
 from src.qa import answer  # noqa: E402
+from src.retrieve import _load  # noqa: E402
 from src.review import review_contract  # noqa: E402
 
 st.set_page_config(page_title="用工合规 AI Agent", page_icon="⚖️", layout="wide")
 
 BADGE = {"高": "🔴 高", "中": "🟠 中", "低": "🟡 低", "无": "🟢 无", "未知": "⚪ 未知"}
 
+# 访问密码：只有配置了 APP_PASSWORD 才启用（公开 demo 防别人烧你的余额）
+_PWD = os.environ.get("APP_PASSWORD")
+if _PWD and not st.session_state.get("_authed"):
+    st.title("⚖️ 用工合规 AI Agent")
+    st.caption("该 Demo 已设置访问密码")
+    _typed = st.text_input("访问密码", type="password", key="pwd_input")
+    if st.button("进入", type="primary"):
+        if _typed == _PWD:
+            st.session_state["_authed"] = True
+            st.rerun()
+        else:
+            st.error("密码错误")
+    st.stop()
+
+
+@st.cache_resource(show_spinner="加载知识库索引 ...")
+def _warm_index():
+    """把 4MB 索引加载一次并缓存，避免每次交互都重读。"""
+    _load()
+    return True
+
+
+_warm_index()
+
 st.title("⚖️ 用工合规 AI Agent")
-st.caption("劳动法问答 · 劳动合同风险审查（知识库截止 2026-11，仅供学习参考，不构成法律意见）")
+st.caption("劳动法问答 · 劳动合同风险审查（知识库 14 部法规 / 678 条，仅供学习参考，不构成法律意见）")
 
 tab_qa, tab_review = st.tabs(["💬 劳动法问答", "📄 劳动合同审查"])
 
+EXAMPLES = [
+    "试用期最长可以约定多久？",
+    "公司拖欠工资三个月不给，能要赔偿金吗？",
+    "公司不给交社保，说折成工资发，行吗？",
+]
+
 with tab_qa:
+    st.markdown("**试试这几个问题**")
+    _cols = st.columns(len(EXAMPLES))
+    for _i, (_c, _q) in enumerate(zip(_cols, EXAMPLES)):
+        if _c.button(_q, key=f"ex_{_i}", use_container_width=True):
+            st.session_state["qa_q"] = _q
+
     question = st.text_area(
         "问题",
-        value="试用期最长可以约定多久？",
+        key="qa_q",
         height=100,
         placeholder="例：公司让我周末加班但不给加班费，合法吗？",
     )
     if st.button("提问", type="primary", key="btn_qa"):
-        with st.spinner("检索法条并生成回答 ..."):
-            result = answer(question)
-        st.markdown(result["answer"])
-        with st.expander(f"📚 引用的法条（{len(result['sources'])} 条）"):
-            for h in result["sources"]:
-                st.markdown(f"**《{h['law_name']}》{h['article_no']}**")
-                st.caption(h["text"])
+        if not question.strip():
+            st.warning("先写一个问题。")
+        else:
+            with st.spinner("检索法条并生成回答 ..."):
+                result = answer(question)
+            st.markdown(result["answer"])
+            with st.expander(f"📚 引用的法条（{len(result['sources'])} 条）"):
+                for h in result["sources"]:
+                    st.markdown(f"**《{h['law_name']}》{h['article_no']}**")
+                    st.caption(h["text"])
 
 with tab_review:
     st.markdown("上传一份劳动合同（txt），系统会逐条审查并给出风险清单。")
+
+    _sample = Path(__file__).parent / "data" / "contracts" / "合同A-科技公司.txt"
+    if _sample.exists():
+        st.download_button(
+            "先下载一份示例合同试试（里面埋了 6 个风险点）",
+            _sample.read_bytes(),
+            file_name="示例劳动合同（含风险点）.txt",
+            mime="text/plain",
+        )
+
     uploaded = st.file_uploader("选择合同文件", type=["txt"])
     manual = st.text_area("或直接粘贴合同正文", height=200, placeholder="第一条 合同期限 ...")
 
@@ -86,4 +137,5 @@ with tab_review:
                             st.markdown(f"- 《{b['law']}》{b['article']} {flag}　{b.get('quote', '')}")
 
 st.divider()
-st.caption("知识库：劳动法 / 劳动合同法 / 调解仲裁法 / 社会保险法 / 工伤保险条例 / 司法解释(一)(二) / 湖北及主要省市裁审口径")
+st.caption("知识库：劳动法 / 劳动合同法 / 调解仲裁法 / 社会保险法 / 工会法 / 工伤保险条例 / 年休假条例 / "
+           "工资支付暂行规定 / 医疗期规定 / 最低工资规定 / 女职工特别规定 / 司法解释(一)(二) / 湖北省工伤保险实施办法")
