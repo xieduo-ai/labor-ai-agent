@@ -124,16 +124,23 @@ with tab_review:
             c2.metric("高风险", s["high"])
             c3.metric("中风险", s["mid"])
             c4.metric("引用有效率", f"{s['citation_valid_rate']:.0%}")
+            if s.get("insufficient_basis"):
+                st.caption(f"⚠️ 有 {s['insufficient_basis']} 个高/中风险问题在候选法条中找不到依据，已如实标注「依据不足」")
 
             for item in report["items"]:
-                with st.expander(f"{BADGE.get(item['risk_level'], item['risk_level'])} · {item['risk_type']} · {item['issue'][:40]}"):
+                _title = item["issue"][:40] if item["issue"] else item["risk_type"]
+                with st.expander(f"{BADGE.get(item['risk_level'], item['risk_level'])} · {item.get('clause_label', '')} · {item['risk_type']} · {_title}"):
                     st.markdown(f"**条款原文**\n\n> {item['clause']}")
                     st.markdown(f"**问题**：{item['issue']}")
+                    if item.get("insufficient_basis"):
+                        st.warning("⚠️ 依据不足：检索到的候选法条中没有能支撑该判断的依据（宁缺勿编）")
                     st.markdown(f"**建议**：{item['suggestion']}")
                     if item["legal_basis"]:
-                        st.markdown("**法律依据**")
+                        st.markdown("**法律依据**（只允许引用检索到的候选条文）")
                         for b in item["legal_basis"]:
-                            flag = "✅" if b.get("exists") else "⚠️ 未在知识库核到"
+                            flag = "✅" if b.get("exists") else "⚠️ 候选外引用"
+                            if b.get("exists") and not b.get("quote_ok"):
+                                flag += " · 摘录与原文不符"
                             st.markdown(f"- 《{b['law']}》{b['article']} {flag}　{b.get('quote', '')}")
 
 st.divider()
