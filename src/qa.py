@@ -12,13 +12,18 @@ def format_context(hits) -> str:
     return "\n\n".join(blocks)
 
 
-def answer(question: str, top_k: int = 6):
+def answer(question: str, history: list[dict] | None = None, top_k: int = 6):
     config.sanity_check()
     hits = search(question, top_k=top_k)
     messages = [
         {"role": "system", "content": QA_SYSTEM},
-        {"role": "user", "content": f"参考资料：\n\n{format_context(hits)}\n\n问题：{question}"},
     ]
+    # 多轮历史：最多带最近 6 条，避免 context 爆炸
+    for h in (history or [])[-6:]:
+        messages.append({"role": h["role"], "content": h["content"]})
+    messages.append(
+        {"role": "user", "content": f"参考资料：\n\n{format_context(hits)}\n\n问题：{question}"}
+    )
     return {"answer": chat(messages), "sources": hits}
 
 
