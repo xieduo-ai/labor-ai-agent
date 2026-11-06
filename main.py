@@ -1,40 +1,52 @@
-"""FastAPI 入口：把现有 RAG 业务包成 HTTP 接口，给 Next.js 前端调用。
+"""FastAPI 唯一后端入口：Streamlit 版（app.py）之外的 HTTP 服务，给 Next.js 前端调用。
 
-启动：
+本地开发：
     uvicorn main:app --reload --port 8000
+生产（Railway 等，容器见 Dockerfile）：
+    uvicorn main:app --host 0.0.0.0 --port $PORT
+
+接口一览：
+    GET  /api/health       探活
+    POST /api/qa           法规问答（带多轮历史，JSON）
+    POST /api/review       合同文件上传（txt/pdf），SSE 流式审查
+    POST /api/review_text  合同正文粘贴（JSON），SSE 流式审查
+    POST /api/agent/run    Agent 意图路由（见 api/agent.py）
 """
+import io
 import os
 from pathlib import Path
 
-# Streamlit 桥接：本地 .env 优先，Render 部署时用环境变量
+# 本地 .env 优先，云上用平台注入的环境变量
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from src.qa import answer
-from src.review import review_contract
 from api.agent import router as agent_router
+from api.review_stream import stream_review
+from src.qa import answer
 
-app = FastAPI(title="用工合规 AI Agent API", version="2.0")
+app = FastAPI(title="用工合规 AI Agent API", version="2.1.0")
 app.include_router(agent_router)
 
-# 前端 Next.js 跑在 localhost:3000 / 部署在 vercel.app，都要放开
+# 前端与后端分属两个域名（如 Railway 上两个服务），比赛期间先放开，上线后收紧到具体域名
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 比赛期间先全开，上线后收紧
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ---------- 模型 ----------
+# ---------- 请求/响应模型 ----------
+
 class QARequest(BaseModel):
     question: str
-    history: list[dict] = []  # [{"role":"user","content":"..."}, {"role":"assistant","content":"..."}]
+    history: list[dict] = []  # [{"role":"user","content":"..."}, ...]
 
 
 class QASource(BaseModel):
@@ -48,15 +60,35 @@ class QAResponse(BaseModel):
     sources: list[QASource]
 
 
-class ReviewResponse(BaseModel):
-    summary: dict
-    items: list[dict]
+class ReviewTextRequest(BaseModel):
+    text: str
 
 
-# ---------- 路由 ----------
+# ---------- 工具 ----------
+
+def _decode_upload(raw: bytes, filename: str) -> str:
+    """上传文件 -> 纯文本。txt 按常见中文编码尝试，PDF 用 pdfplumber 抽取。"""
+    if filename.lower().endswith(".pdf"):
+        try:
+            import pdfplumber
+        except ImportError:
+            raise HTTPException(status_code=500, detail="PDF 解析未安装（pdfplumber）")
+        with pdfplumber.open(io.BytesIO(raw)) as pdf:
+            return "\n".join((p.extract_text() or "") for p in pdf.pages)
+
+    for enc in ("utf-8-sig", "utf-8", "gb18030"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    raise HTTPException(status_code=400, detail="无法识别文件编码（支持 utf-8 / gb18030）")
+
+
+# ---------- 接口 ----------
+
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "labor-ai-agent", "version": "2.0"}
+    return {"status": "ok", "service": "labor-ai-agent", "version": app.version}
 
 
 @app.post("/api/qa", response_model=QAResponse)
@@ -72,44 +104,22 @@ def qa(req: QARequest):
     )
 
 
-@app.post("/api/review", response_model=ReviewResponse)
+@app.post("/api/review")
 async def review(file: UploadFile = File(...)):
-    """上传合同文件（txt/pdf/docx），返回风险清单。"""
+    """上传合同文件（txt/pdf），SSE 流式返回逐条审查结果。"""
     raw = await file.read()
-    # 解码
-    text = ""
-    if file.filename and file.filename.lower().endswith(".pdf"):
-        # PDF 用 pdfplumber（后面加依赖）
-        try:
-            import pdfplumber
-            import io
-            with pdfplumber.open(io.BytesIO(raw)) as pdf:
-                text = "\n".join((p.extract_text() or "") for p in pdf.pages)
-        except ImportError:
-            raise HTTPException(status_code=500, detail="PDF 解析未安装，请 pip install pdfplumber")
-    else:
-        for enc in ("utf-8-sig", "utf-8", "gb18030"):
-            try:
-                text = raw.decode(enc)
-                break
-            except UnicodeDecodeError:
-                continue
-
+    text = _decode_upload(raw, file.filename or "")
     if len(text.strip()) < 30:
         raise HTTPException(status_code=400, detail="合同内容太短，无法审查")
-
-    report = review_contract(text)
-    return ReviewResponse(**report)
+    return StreamingResponse(stream_review(text), media_type="text/event-stream")
 
 
-@app.post("/api/review_text", response_model=ReviewResponse)
-async def review_text(body: dict):
-    """直接粘贴合同正文审查（不走文件上传）。"""
-    text = body.get("text", "")
-    if len(text.strip()) < 30:
+@app.post("/api/review_text")
+async def review_text(req: ReviewTextRequest):
+    """粘贴合同正文（JSON），SSE 流式返回逐条审查结果。"""
+    if len(req.text.strip()) < 30:
         raise HTTPException(status_code=400, detail="合同内容太短，无法审查")
-    report = review_contract(text)
-    return ReviewResponse(**report)
+    return StreamingResponse(stream_review(req.text), media_type="text/event-stream")
 
 
 if __name__ == "__main__":
