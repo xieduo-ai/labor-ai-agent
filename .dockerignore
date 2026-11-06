@@ -1,0 +1,16 @@
+# 后端镜像只装 Python 服务，前端与本地产物不进镜像
+.git
+.gitignore
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+.vscode
+.streamlit
+frontend
+web
+docs
+eval/retrieval_result.csv
+*.md
+!README.md
