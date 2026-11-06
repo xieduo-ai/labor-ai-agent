@@ -6,6 +6,23 @@
 
 面向中小企业的用工合规助手。核心是一条 **「按条切分 → BM25 + 向量混合检索 → RRF 融合 → Cross-Encoder 重排 → 强制引用生成」** 的 RAG pipeline，外加一套自建的劳动法评测集。
 
+## 团队信息
+
+| 项 | 内容 |
+|---|---|
+| 团队名称 | 明契 |
+| 队长 / 开发者 | 谢多（中南财经政法大学 · 劳动关系 + 人工智能双学位） |
+| 分工说明 | 检索管线、合同审查逻辑、后端 API、前端界面、评测集均由队长独立开发 |
+| 指导教师 | 无 |
+
+## 两种使用方式
+
+| | Streamlit 版（在线 Demo） | Web 版（FastAPI + Next.js） |
+|---|---|---|
+| 入口 | `streamlit run app.py` | `uvicorn main:app` + `cd frontend && npm run dev` |
+| 合同审查 | 整份一次性返回 | **SSE 流式**，每审完一条立即推送渲染 |
+| 界面 | 单页 | 落地页 / 劳动者问答 / 合同审查 / 赔偿计算器 / Agent |
+
 ## 为什么做这个
 
 - 中小企业普遍没有专职法务，劳动合同、规章制度里的坑（试用期超期、放弃社保、竞业限制无补偿）常年没人查；
@@ -75,7 +92,12 @@ embeddings.npy + bm25.pkl
 src/qa.py   问答（强制引用 + 资料不足则拒答）
 src/review.py  合同逐条审查（多问题拆分 + 合同期限背景 + closed-set 引用 + 摘录逐字核验）
    ▼
-app.py  Streamlit 界面
+app.py          Streamlit 界面（单页）
+main.py         FastAPI 后端（Web 版唯一入口）
+  ├─ api/review_stream.py   SSE 流式逐条审查（/api/review、/api/review_text）
+  ├─ api/agent.py           Agent 意图路由（/api/agent/run）
+  └─ /api/qa                问答（带多轮历史）
+frontend/       Next.js 前端（5 页面，fetch 流式解析 SSE）
 ```
 
 ## 快速开始
@@ -92,8 +114,33 @@ python -m src.index           # 建索引（首次 2-5 分钟）
 python -m src.qa "试用期最长可以约定多久"
 python eval/run_eval.py eval/qa_set.hard.jsonl   # 评测
 python -m src.review data/contracts/合同A-科技公司.txt  # 合同审查
-streamlit run app.py          # 界面
+streamlit run app.py          # Streamlit 界面
 ```
+
+### Web 版（FastAPI + Next.js）
+
+```bash
+# 后端（终端 1）
+uvicorn main:app --reload --port 8000
+curl http://127.0.0.1:8000/api/health    # 探活
+
+# 前端（终端 2）
+cd frontend
+cp .env.example .env.local               # 可留空，默认连 localhost:8000
+npm install
+npm run dev                              # http://localhost:3000
+```
+
+生产部署：后端用 Dockerfile（Railway/Render 均可，环境变量见 `.env.example` 与 `render.yaml`）；
+前端构建时注入 `NEXT_PUBLIC_API_BASE=https://<后端域名>`。
+
+环境变量（后端，完整模板见 `.env.example`）：
+
+| 变量 | 说明 |
+|---|---|
+| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | 生成模型（默认 DeepSeek） |
+| `EMBED_API_KEY` / `EMBED_BASE_URL` / `EMBED_MODEL` | 向量模型（bge-m3，硅基流动） |
+| `RERANK_MODEL` / `USE_RERANK` | bge-reranker-v2-m3 重排 |
 
 ## 几个设计选择
 
