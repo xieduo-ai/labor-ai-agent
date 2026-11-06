@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+import { API_BASE, errMessage } from "@/lib/api";
 
 interface Step {
   step: string;
@@ -43,16 +42,12 @@ export default function AgentPage() {
         body: JSON.stringify({ message: msg, contract_text: contract }),
       });
       const data: AgentResp = await r.json();
-      // 逐步展示思考链
-      for (const s of data.steps) {
-        setSteps((prev) => [...prev, s]);
-        await new Promise((r) => setTimeout(r, 600));
-      }
+      setSteps(data.steps); // 思考链由后端真实返回，不做人为延迟
       setReply(data.reply);
       setTool(data.tool);
       setFinalResult(data.result);
-    } catch (e: any) {
-      setReply(`出错了：${e.message}`);
+    } catch (e) {
+      setReply(`出错了：${errMessage(e)}`);
     } finally {
       setLoading(false);
     }

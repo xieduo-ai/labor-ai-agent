@@ -33,7 +33,7 @@ export default function Home() {
               我是劳动者，问一问 →
             </Link>
             <Link
-              href="/enterprise/review"
+              href="/review"
               className="rounded-full bg-white px-6 py-3 font-medium text-brand hover:bg-slate-100"
             >
               我是企业，审合同 →

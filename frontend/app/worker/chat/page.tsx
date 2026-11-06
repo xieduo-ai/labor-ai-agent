@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { askQA, type QASource } from "@/lib/api";
+import { askQA, errMessage, type QASource } from "@/lib/api";
 
 interface Msg {
   role: "user" | "assistant";
@@ -27,28 +27,23 @@ export default function WorkerChat() {
     const newMsgs = [...msgs, { role: "user" as const, content: q }];
     setMsgs(newMsgs);
     setLoading(true);
-    try {
-      // 把之前的对话历史传给后端做上下文
-      const history = newMsgs.slice(0, -1).map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-      const res = await fetch("http://localhost:8000/api/qa", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q, history }),
-      });
-      const data = await res.json();
-      setMsgs((m) => [
-        ...m,
-        { role: "assistant", content: data.answer, sources: data.sources },
-      ]);
-    } catch (e: any) {
-      setMsgs((m) => [
-        ...m,
-        { role: "assistant", content: `出错了：${e.message}` },
-      ]);
-    } finally {
+      try {
+        // 把之前的对话历史传给后端做上下文
+        const history = newMsgs.slice(0, -1).map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+        const data = await askQA(q, history);
+        setMsgs((m) => [
+          ...m,
+          { role: "assistant", content: data.answer, sources: data.sources },
+        ]);
+      } catch (e) {
+        setMsgs((m) => [
+          ...m,
+          { role: "assistant", content: `出错了：${errMessage(e)}` },
+        ]);
+      } finally {
       setLoading(false);
     }
   }

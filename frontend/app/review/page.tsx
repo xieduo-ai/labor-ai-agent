@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { reviewText, type ReviewReport, type ReviewItem } from "@/lib/api";
+import { useRef, useState } from "react";
+import {
+  errMessage,
+  streamReview,
+  type ReviewItem,
+  type ReviewSummary,
+} from "@/lib/api";
 
 const LEVEL_STYLE: Record<string, string> = {
   高: "bg-red-50 border-red-200 text-red-700",
@@ -22,74 +27,76 @@ const LEVEL_DOT: Record<string, string> = {
 export default function ReviewPage() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState("");
-  const [report, setReport] = useState<ReviewReport | null>(null);
+  // 流式状态：条款总数 / 已审完条数 / 增量结果 / 汇总 / 错误
+  const [total, setTotal] = useState(0);
+  const [reviewed, setReviewed] = useState(0);
+  const [items, setItems] = useState<ReviewItem[]>([]);
+  const [summary, setSummary] = useState<ReviewSummary | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const riskItems = items.filter((it) => it.risk_level !== "无");
+  const cleanCount = items.length - riskItems.length;
+
+  function reset() {
+    setTotal(0);
+    setReviewed(0);
+    setItems([]);
+    setSummary(null);
+    setErrors([]);
+  }
+
+  async function start(payload: { text: string } | FormData) {
+    setLoading(true);
+    reset();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    try {
+      await streamReview(payload, (ev) => {
+        switch (ev.event) {
+          case "meta":
+            setTotal(ev.clauses);
+            break;
+          case "clause":
+            setItems((prev) => [...prev, ...ev.items]);
+            setReviewed(ev.index);
+            break;
+          case "done":
+            setSummary(ev.summary);
+            break;
+          case "error":
+            setErrors((prev) => [...prev, ev.message]);
+            break;
+        }
+      }, ac.signal);
+    } catch (e) {
+      setErrors((prev) => [...prev, errMessage(e)]);
+    } finally {
+      setLoading(false);
+      abortRef.current = null;
+    }
+  }
 
   async function run() {
     if (text.trim().length < 30) return;
-    setLoading(true);
-    setReport(null);
-    setProgress("正在切分条款…");
-    try {
-      const timer = setInterval(() => {
-        setProgress((p) => {
-          if (p.includes("切分")) return "正在检索法条并逐条审查（约30-90秒）…";
-          if (p.includes("检索")) return "正在汇总风险清单…";
-          return p;
-        });
-      }, 3000);
-      const r = await reviewText(text);
-      clearInterval(timer);
-      setReport(r);
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setLoading(false);
-      setProgress("");
-    }
+    await start({ text });
   }
 
   async function uploadFile(file: File) {
-    setLoading(true);
-    setProgress(`正在上传并解析 ${file.name}…`);
-    const timer = setInterval(() => {
-      setProgress((p) => {
-        if (p.includes("上传")) return "正在检索法条并逐条审查（约30-90秒）…";
-        if (p.includes("检索")) return "正在汇总风险清单…";
-        return p;
-      });
-    }, 3000);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await fetch("http://localhost:8000/api/review", {
-        method: "POST",
-        body: fd,
-      });
-      if (!r.ok) throw new Error((await r.json()).detail || "审查失败");
-      setReport(await r.json());
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      clearInterval(timer);
-      setLoading(false);
-      setProgress("");
-    }
+    const fd = new FormData();
+    fd.append("file", file);
+    await start(fd);
   }
+
+  const pct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <h1 className="text-2xl font-bold text-slate-900">📄 劳动合同风险审查</h1>
       <p className="mt-1 text-sm text-slate-500">
         上传合同文件（PDF/txt）或粘贴正文，AI 逐条识别试用期超期、放弃社保、无补偿竞业限制等风险。
+        审查过程实时流式返回，每审完一条立即显示。
       </p>
-
-      {loading && (
-        <div className="mt-4 flex items-center gap-3 rounded-xl bg-brand px-4 py-3 text-white">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-          <span className="text-sm">{progress || "AI 正在逐条审查，约需30-90秒…"}</span>
-        </div>
-      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl bg-white p-5 shadow-sm">
@@ -97,6 +104,7 @@ export default function ReviewPage() {
           <input
             type="file"
             accept=".txt,.pdf"
+            disabled={loading}
             onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
             className="mt-2 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand file:px-4 file:py-2 file:text-white file:cursor-pointer"
           />
@@ -109,6 +117,7 @@ export default function ReviewPage() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={12}
+            disabled={loading}
             placeholder={"第一条 本合同为固定期限劳动合同，期限自2024年1月1日至2027年12月31日。\n第二条 试用期6个月，试用期工资2000元。\n..."}
             className="w-full rounded-lg border border-slate-300 p-3 text-sm"
           />
@@ -119,40 +128,72 @@ export default function ReviewPage() {
           >
             {loading ? "审查中…" : "开始审查"}
           </button>
-          {progress && (
-            <div className="mt-2 text-center text-xs text-slate-500 animate-pulse">
-              {progress}
-            </div>
-          )}
         </div>
 
         <div>
-          {!report && !loading && (
+          {/* 流式进度：每审完一条更新一次 */}
+          {loading && (
+            <div className="rounded-2xl bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+                <span className="text-sm font-medium text-slate-700">
+                  {total > 0
+                    ? `正在逐条审查：${reviewed} / ${total} 条`
+                    : "正在切分条款、检索法条…"}
+                </span>
+                <span className="ml-auto text-xs text-slate-400">{pct}%</span>
+              </div>
+              {total > 0 && (
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-brand transition-all duration-500"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {!loading && !summary && items.length === 0 && errors.length === 0 && (
             <div className="flex h-64 items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 text-sm text-slate-400">
               审查结果会显示在这里
             </div>
           )}
-          {loading && (
-            <div className="flex h-64 items-center justify-center rounded-2xl bg-white text-sm text-slate-500">
-              <div className="text-center">
-                <div className="mb-2 inline-block h-8 w-8 animate-spin rounded-full border-4 border-brand border-t-transparent" />
-                <div>{progress || "AI 正在逐条审查…"}</div>
+
+          {/* 汇总：done 事件到达后显示 */}
+          {summary && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-4 gap-3">
+                <Stat label="条款" value={summary.clauses} />
+                <Stat label="🔴 高风险" value={summary.high} danger />
+                <Stat label="🟠 中风险" value={summary.mid} warn />
+                <Stat label="🟡 低风险" value={summary.low} />
+              </div>
+              {/* 引用可信度：closed-set 校验是本项目的核心卖点，直接亮出来 */}
+              <div className="rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
+                引用有效率 {(summary.citation_valid_rate * 100).toFixed(1)}% ·
+                摘录逐字率 {(summary.quote_match_rate * 100).toFixed(1)}% ·
+                另有 {cleanCount} 条条款未发现明显风险
+                {summary.insufficient_basis > 0 &&
+                  ` · ${summary.insufficient_basis} 条已标注「依据不足」`}
               </div>
             </div>
           )}
-          {report && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-4 gap-3">
-                <Stat label="条款" value={report.summary.clauses} />
-                <Stat label="🔴 高风险" value={report.summary.high} danger />
-                <Stat label="🟠 中风险" value={report.summary.mid} warn />
-                <Stat label="🟡 低风险" value={report.summary.low} />
-              </div>
-              {report.items
-                .filter((it) => it.risk_level !== "无")
-                .map((it, i) => (
-                  <RiskCard key={i} item={it} />
-                ))}
+
+          {/* 风险清单：逐条到达、逐条渲染 */}
+          {riskItems.length > 0 && (
+            <div className={`mt-4 space-y-3 ${loading ? "opacity-95" : ""}`}>
+              {riskItems.map((it, i) => (
+                <RiskCard key={i} item={it} />
+              ))}
+            </div>
+          )}
+
+          {errors.length > 0 && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+              {errors.map((m, i) => (
+                <div key={i}>⚠️ {m}</div>
+              ))}
             </div>
           )}
         </div>
@@ -206,7 +247,8 @@ function RiskCard({ item }: { item: ReviewItem }) {
         <div className="mt-2 border-t border-current/10 pt-2 text-xs">
           {item.legal_basis.map((b, i) => (
             <div key={i} className="mt-1">
-              《{b.law}》{b.article} {b.exists ? "✅" : "⚠️"}
+              《{b.law}》{b.article}{" "}
+              {b.exists ? (b.quote_ok ? "✅ 原文核对一致" : "⚠️ 摘录与原文不符") : "⚠️ 依据存疑"}
               {b.quote && <span className="ml-1 opacity-70">— {b.quote}</span>}
             </div>
           ))}
