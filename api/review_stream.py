@@ -43,6 +43,7 @@ def stream_review(text: str) -> Iterator[str]:
     yield _sse("meta", {"clauses": len(clauses)})
 
     all_items = []
+    failed = 0
     for i, clause in enumerate(clauses, 1):
         try:
             res = review_clause(clause, contract_ctx=contract_ctx)
@@ -60,22 +61,24 @@ def stream_review(text: str) -> Iterator[str]:
             all_items.extend(new)
             yield _sse("clause", {"index": i, "total": len(clauses), "items": new})
         except Exception as e:  # 单条失败不拖垮整份审查
+            failed += 1
             yield _sse("error", {"message": f"第 {i} 条审查失败：{e}"})
 
-    # 汇总口径与 src/review.review_contract 完全一致
+    # 汇总口径与 src/review.review_contract 一致。
+    # 注意：没有任何引用时，有效率必须为 None 而不是 1.0——否则「零引用」会被显示成
+    # 「100% 引用有效」，比直接报错更误导。
     cited = [b for r in all_items for b in r["legal_basis"]]
     exists_n = sum(bool(b.get("exists")) for b in cited)
+    matched_n = sum(bool(b.get("quote_ok")) for b in cited if b.get("exists"))
     summary = {
         "clauses": len(clauses),
+        "failed": failed,
         "issues": sum(r["risk_level"] in ("高", "中", "低") for r in all_items),
         "high": sum(r["risk_level"] == "高" for r in all_items),
         "mid": sum(r["risk_level"] == "中" for r in all_items),
         "low": sum(r["risk_level"] == "低" for r in all_items),
         "insufficient_basis": sum(bool(r.get("insufficient_basis")) for r in all_items),
-        "citation_valid_rate": (exists_n / len(cited)) if cited else 1.0,
-        "quote_match_rate": (
-            sum(bool(b.get("quote_ok")) for b in cited if b.get("exists"))
-            / max(1, exists_n)
-        ),
+        "citation_valid_rate": (exists_n / len(cited)) if cited else None,
+        "quote_match_rate": (matched_n / exists_n) if exists_n else None,
     }
     yield _sse("done", {"summary": summary})

@@ -36,13 +36,16 @@ export interface ReviewItem {
 
 export interface ReviewSummary {
   clauses: number;
+  /** 审查失败的条款数，>0 时结果不完整，前端要显式提示 */
+  failed: number;
   issues: number;
   high: number;
   mid: number;
   low: number;
   insufficient_basis: number;
-  citation_valid_rate: number;
-  quote_match_rate: number;
+  /** 没有任何引用时为 null（不能报 100%） */
+  citation_valid_rate: number | null;
+  quote_match_rate: number | null;
 }
 
 // SSE 事件：与后端 api/review_stream.py 的事件序列一致

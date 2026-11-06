@@ -88,7 +88,10 @@ export default function ReviewPage() {
     await start(fd);
   }
 
-  const pct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
+  const progressPct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
+  // 没有引用时后端返回 null，显示「—」而不是伪造 100%
+  const rate = (v: number | null) =>
+    v == null ? "—" : `${(v * 100).toFixed(1)}%`;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -141,13 +144,13 @@ export default function ReviewPage() {
                     ? `正在逐条审查：${reviewed} / ${total} 条`
                     : "正在切分条款、检索法条…"}
                 </span>
-                <span className="ml-auto text-xs text-slate-400">{pct}%</span>
+                <span className="ml-auto text-xs text-slate-400">{progressPct}%</span>
               </div>
               {total > 0 && (
                 <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
                   <div
                     className="h-full rounded-full bg-brand transition-all duration-500"
-                    style={{ width: `${pct}%` }}
+                    style={{ width: `${progressPct}%` }}
                   />
                 </div>
               )}
@@ -169,11 +172,17 @@ export default function ReviewPage() {
                 <Stat label="🟠 中风险" value={summary.mid} warn />
                 <Stat label="🟡 低风险" value={summary.low} />
               </div>
+              {/* 有条款失败时先亮出「结果不完整」，避免 0 风险被误读成「合同没问题」 */}
+              {summary.failed > 0 && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-relaxed text-red-700">
+                  ⚠️ 有 {summary.failed} 条审查失败，本次结果<strong>不完整</strong>，下面的风险统计仅覆盖成功的{" "}
+                  {summary.clauses - summary.failed} 条，不能作为「合同无风险」的结论。
+                </div>
+              )}
               {/* 引用可信度：closed-set 校验是本项目的核心卖点，直接亮出来 */}
               <div className="rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
-                引用有效率 {(summary.citation_valid_rate * 100).toFixed(1)}% ·
-                摘录逐字率 {(summary.quote_match_rate * 100).toFixed(1)}% ·
-                另有 {cleanCount} 条条款未发现明显风险
+                引用有效率 {rate(summary.citation_valid_rate)} · 摘录逐字率{" "}
+                {rate(summary.quote_match_rate)} · 另有 {cleanCount} 条条款未发现明显风险
                 {summary.insufficient_basis > 0 &&
                   ` · ${summary.insufficient_basis} 条已标注「依据不足」`}
               </div>
