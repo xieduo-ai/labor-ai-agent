@@ -27,6 +27,10 @@ const LEVEL_DOT: Record<string, string> = {
 export default function ReviewPage() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
+  // 多模态：识别阶段状态 + 识别来源 + 图片预览
+  const [stage, setStage] = useState<"idle" | "reading" | "reviewing">("idle");
+  const [extract, setExtract] = useState<{ method: string; pages: number; chars: number } | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   // 流式状态：条款总数 / 已审完条数 / 增量结果 / 汇总 / 错误
   const [total, setTotal] = useState(0);
   const [reviewed, setReviewed] = useState(0);
@@ -44,9 +48,11 @@ export default function ReviewPage() {
     setItems([]);
     setSummary(null);
     setErrors([]);
+    setExtract(null);
+    setStage("idle");
   }
 
-  async function start(payload: { text: string } | FormData) {
+  async function start(payload: { text: string } | FormData, path?: string) {
     setLoading(true);
     reset();
     const ac = new AbortController();
@@ -54,6 +60,15 @@ export default function ReviewPage() {
     try {
       await streamReview(payload, (ev) => {
         switch (ev.event) {
+          case "extract_start":
+            setStage("reading");
+            break;
+          case "extract":
+            setStage("reviewing");
+            setExtract({ method: ev.method, pages: ev.pages, chars: ev.chars });
+            // 识别结果回填到编辑框：用户可以核对、改错字后重审
+            setText(ev.text);
+            break;
           case "meta":
             setTotal(ev.clauses);
             break;
@@ -68,11 +83,12 @@ export default function ReviewPage() {
             setErrors((prev) => [...prev, ev.message]);
             break;
         }
-      }, ac.signal);
+      }, ac.signal, path);
     } catch (e) {
       setErrors((prev) => [...prev, errMessage(e)]);
     } finally {
       setLoading(false);
+      setStage("idle");
       abortRef.current = null;
     }
   }
@@ -82,10 +98,17 @@ export default function ReviewPage() {
     await start({ text });
   }
 
+  /** 按文件类型选通道：图片走多模态识别，PDF/txt 走文本抽取 */
   async function uploadFile(file: File) {
+    const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|bmp)$/i.test(file.name);
+    if (isImage) {
+      setPreview(URL.createObjectURL(file));
+    } else {
+      setPreview(null);
+    }
     const fd = new FormData();
     fd.append("file", file);
-    await start(fd);
+    await start(fd, isImage ? "/api/review_image" : "/api/review");
   }
 
   const progressPct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
@@ -97,20 +120,55 @@ export default function ReviewPage() {
     <div className="mx-auto max-w-5xl px-4 py-10">
       <h1 className="text-2xl font-bold text-slate-900">📄 劳动合同风险审查</h1>
       <p className="mt-1 text-sm text-slate-500">
-        上传合同文件（PDF/txt）或粘贴正文，AI 逐条识别试用期超期、放弃社保、无补偿竞业限制等风险。
-        审查过程实时流式返回，每审完一条立即显示。
+        上传合同文件、<strong>直接拍合同照片</strong>，或粘贴正文。AI 逐条识别试用期超期、放弃社保、无补偿竞业限制等风险，
+        每条结论都附可核验的法条原文。审查过程实时流式返回，每审完一条立即显示。
       </p>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <label className="text-sm font-medium text-slate-700">上传合同文件</label>
-          <input
-            type="file"
-            accept=".txt,.pdf"
-            disabled={loading}
-            onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
-            className="mt-2 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand file:px-4 file:py-2 file:text-white file:cursor-pointer"
-          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium text-slate-700">上传合同文件</label>
+              <input
+                type="file"
+                accept=".txt,.pdf"
+                disabled={loading}
+                onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
+                className="mt-2 block w-full text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-white file:cursor-pointer"
+              />
+              <div className="mt-1 text-[11px] text-slate-400">PDF / txt（有文字层，1-2 秒）</div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">拍合同照片</label>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                disabled={loading}
+                onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
+                className="mt-2 block w-full text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-brand file:px-3 file:py-2 file:text-white file:cursor-pointer"
+              />
+              <div className="mt-1 text-[11px] text-slate-400">手机相册/直接拍照（视觉模型识别）</div>
+            </div>
+          </div>
+
+          {preview && (
+            <div className="mt-3 flex items-center gap-3 rounded-xl bg-slate-50 p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={preview} alt="合同照片预览" className="h-16 w-16 rounded-lg object-cover" />
+              <div className="text-xs text-slate-500">
+                已选图片
+                {extract && (
+                  <div className="mt-1 text-green-700">
+                    ✅ 识别 {extract.chars} 字（
+                    {extract.method === "pdf_vision" ? `扫描件 ${extract.pages} 页` : "照片"}）
+                    ，已填入下方文本框，可改错字后重审
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
             <div className="h-px flex-1 bg-slate-200" />
             或粘贴正文
@@ -134,15 +192,17 @@ export default function ReviewPage() {
         </div>
 
         <div>
-          {/* 流式进度：每审完一条更新一次 */}
+          {/* 流式进度：识别阶段 + 逐条审查阶段 */}
           {loading && (
             <div className="rounded-2xl bg-white p-5 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand border-t-transparent" />
                 <span className="text-sm font-medium text-slate-700">
-                  {total > 0
-                    ? `正在逐条审查：${reviewed} / ${total} 条`
-                    : "正在切分条款、检索法条…"}
+                  {stage === "reading"
+                    ? "正在识别图片中的合同文字…（视觉模型）"
+                    : total > 0
+                      ? `正在逐条审查：${reviewed} / ${total} 条`
+                      : "正在切分条款、检索法条…"}
                 </span>
                 <span className="ml-auto text-xs text-slate-400">{progressPct}%</span>
               </div>

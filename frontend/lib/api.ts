@@ -53,7 +53,16 @@ export type ReviewStreamEvent =
   | { event: "meta"; clauses: number }
   | { event: "clause"; index: number; total: number; items: ReviewItem[] }
   | { event: "done"; summary: ReviewSummary }
-  | { event: "error"; message: string };
+  | { event: "error"; message: string }
+  // 多模态专属：开始识别 / 识别完成（原文供用户核对）
+  | { event: "extract_start"; note: string }
+  | {
+      event: "extract";
+      text: string;
+      method: "vision" | "pdf_text" | "pdf_vision" | string;
+      pages: number;
+      chars: number;
+    };
 
 // ---------- 请求 ----------
 
@@ -72,28 +81,28 @@ export async function askQA(
 
 /**
  * 流式合同审查：POST 后逐帧读取 SSE（用 fetch 流式读取，因为 EventSource 不支持 POST）。
- * @param payload 粘贴正文传 {text}，文件上传传 FormData（含 file 字段）
+ * @param payload 粘贴正文传 {text}，文件/图片上传传 FormData（含 file 字段）
  * @param onEvent 每收到一个事件回调一次，调用方据此增量渲染
+ * @param path 覆盖接口路径：图片走 /api/review_image
  */
 export async function streamReview(
   payload: { text: string } | FormData,
   onEvent: (ev: ReviewStreamEvent) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  path?: string
 ): Promise<void> {
   const isForm = payload instanceof FormData;
-  const r = await fetch(
-    `${API_BASE}${isForm ? "/api/review" : "/api/review_text"}`,
-    {
-      method: "POST",
-      signal,
-      ...(isForm
-        ? { body: payload }
-        : {
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          }),
-    }
-  );
+  const url = `${API_BASE}${path ?? (isForm ? "/api/review" : "/api/review_text")}`;
+  const r = await fetch(url, {
+    method: "POST",
+    signal,
+    ...(isForm
+      ? { body: payload }
+      : {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }),
+  });
 
   if (!r.ok) {
     let detail = "";
