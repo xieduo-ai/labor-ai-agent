@@ -19,6 +19,12 @@ LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
 
+# ---- 视觉模型（读合同照片/扫描件）----
+# 与 LLM_MODEL 共用同一家服务商，默认走硅基流动的 Qwen3-VL（MoE，30B 激活 3B，约 10s/页）
+LLM_VL_MODEL = os.getenv("LLM_VL_MODEL", "Qwen/Qwen3-VL-30B-A3B-Instruct")
+VL_MAX_PAGES = int(os.getenv("VL_MAX_PAGES", "3"))   # 单个 PDF 最多识别几页
+VL_MAX_SIDE = int(os.getenv("VL_MAX_SIDE", "1600"))  # 图片长边压缩上限（px）
+
 # ---- 向量 / 重排 ----
 EMBED_API_KEY = os.getenv("EMBED_API_KEY", "")
 EMBED_BASE_URL = os.getenv("EMBED_BASE_URL", "https://api.siliconflow.cn/v1")

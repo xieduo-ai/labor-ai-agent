@@ -82,3 +82,34 @@ def stream_review(text: str) -> Iterator[str]:
         "quote_match_rate": (matched_n / exists_n) if exists_n else None,
     }
     yield _sse("done", {"summary": summary})
+
+
+def stream_vision_review(raw: bytes, filename: str) -> Iterator[str]:
+    """多模态入口：先识别图片/扫描件，再把识别结果交给同一条审查管线。
+
+    事件序列在 stream_review 的基础上多两个：
+      extract_start -> {"note": "..."}                     开始识别
+      extract       -> {"text", "method", "pages"}        识别完成，前端展示原文供核对
+    """
+    yield _sse("extract_start", {"note": "正在识别合同文字…"})
+
+    try:
+        from src.vision import NOT_CONTRACT, extract_from_upload
+
+        info = extract_from_upload(raw, filename)
+    except Exception as e:  # noqa: BLE001  识别失败要明确告知，不能让用户以为审查过了
+        yield _sse("error", {"message": f"文字识别失败：{e}"})
+        return
+
+    text = (info.get("text") or "").strip()
+    if not text or text == NOT_CONTRACT:
+        yield _sse("error", {"message": "没有识别到合同条款，请确认拍摄的是合同正文，且文字清晰"})
+        return
+
+    yield _sse("extract", {
+        "text": text,
+        "method": info.get("method", ""),
+        "pages": info.get("pages", 0),
+        "chars": len(text),
+    })
+    yield from stream_review(text)
