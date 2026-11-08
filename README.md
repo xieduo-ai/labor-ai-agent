@@ -90,16 +90,24 @@ data/processed/chunks.jsonl
 embeddings.npy + bm25.pkl
    │  src/retrieve.py    查询扩展 → 双路召回 → RRF → bge-reranker 重排
    ▼
-src/qa.py   问答（强制引用 + 资料不足则拒答）
-src/review.py  合同逐条审查（多问题拆分 + 合同期限背景 + closed-set 引用 + 摘录逐字核验）
+src/qa.py          问答（强制引用 + 资料不足则拒答）
+src/review.py      合同逐条审查（多问题拆分 + 合同期限背景 + closed-set 引用 + 摘录逐字核验）
+src/vision.py      合同照片 / 扫描件识别（视觉模型只做「读字」，不改审查逻辑）
+src/compensation.py 第 47/87 条经济补偿规则（三倍封顶、12 年上限、违法解除 2N）
+src/tools.py       Agent 工具实现 + function calling schema（查法条 / 审合同 / 算赔偿 / 写仲裁申请书）
    ▼
-app.py          Streamlit 界面（单页）
-main.py         FastAPI 后端（Web 版唯一入口）
-  ├─ api/review_stream.py   SSE 流式逐条审查（/api/review、/api/review_text）
-  ├─ api/agent.py           Agent 意图路由（/api/agent/run）
-  └─ /api/qa                问答（带多轮历史）
-frontend/       Next.js 前端（5 页面，fetch 流式解析 SSE）
+app.py             Streamlit 界面（评测复现用）
+main.py            FastAPI 后端（Web 版唯一入口）
+  ├─ /api/review, /api/review_image, /api/review_text   SSE 流式逐条审查（含多模态识别回显）
+  ├─ /api/agent/stream, /api/agent/run                 多轮 Function Calling 工具循环（SSE 展示调用过程）
+  ├─ /api/qa, /api/calc, /api/health                   问答 / 赔偿计算 / 探活
+  └─ api/review_stream.py, api/agent.py                 流式编排层（不改动已评测的 src/review.py）
+frontend/          Next.js 前端（5 页面，fetch 流式解析 SSE，拍照上传）
 ```
+
+模型分工：问答与审查用 `DeepSeek-V3`（长文本质量），Agent 用 `DeepSeek-V3.1`（实测 V3 在硅基流动
+不总返回原生 `tool_calls`，会把调用写成正文 JSON 的「假调用」），视觉识别用 `Qwen3-VL-30B-A3B`。
+换供应商只改 `.env`，业务代码不写死模型名（见 `config.py` / `src/llm.py`）。
 
 ## 快速开始
 
@@ -135,13 +143,20 @@ npm run dev                              # http://localhost:3000
 生产部署：后端用 Dockerfile（Railway/Render 均可，环境变量见 `.env.example` 与 `render.yaml`）；
 前端构建时注入 `NEXT_PUBLIC_API_BASE=https://<后端域名>`。
 
-环境变量（后端，完整模板见 `.env.example`）：
+环境变量（后端，完整模板见 `.env.example`，本地复制为 `.env`，线上由平台注入）：
 
-| 变量 | 说明 |
+| 变量 | 默认值 / 说明 |
 |---|---|
-| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | 生成模型（默认 DeepSeek） |
-| `EMBED_API_KEY` / `EMBED_BASE_URL` / `EMBED_MODEL` | 向量模型（bge-m3，硅基流动） |
-| `RERANK_MODEL` / `USE_RERANK` | bge-reranker-v2-m3 重排 |
+| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | 硅基流动 `deepseek-ai/DeepSeek-V3`，问答与合同审查 |
+| `LLM_VL_MODEL` / `VL_MAX_PAGES` / `VL_MAX_SIDE` | `Qwen/Qwen3-VL-30B-A3B-Instruct`；扫描 PDF 最多 3 页、图片长边 1600px |
+| `AGENT_MODEL` | `deepseek-ai/DeepSeek-V3.1`，Agent 专用（见上方模型分工） |
+| `EMBED_API_KEY` / `EMBED_BASE_URL` / `EMBED_MODEL` | `BAAI/bge-m3` 向量化 |
+| `RERANK_MODEL` / `USE_RERANK` | `BAAI/bge-reranker-v2-m3` 重排；调不通设 `USE_RERANK=0` |
+| `PORT` | 生产平台注入，Dockerfile 不硬编码 |
+| `NEXT_PUBLIC_API_BASE`（前端） | 构建期变量，见 `frontend/.env.example`；改后必须重新构建前端 |
+
+依赖清单在 `requirements.txt`，其中 `pypdfium2` 是 `pdfplumber.page.to_image()` 的隐式依赖，
+缺了会让「扫描版 PDF 多模态识别」在全新容器里直接失败（本机装过不代表线上装过）。
 
 ## 几个设计选择
 
