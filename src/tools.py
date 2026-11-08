@@ -21,6 +21,25 @@ from src.review import review_contract, split_clauses
 
 # ---------- 工具实现 ----------
 
+def plan_tasks(goal: str, steps: list[str]) -> dict:
+    """登记本次任务的执行计划。
+
+    评分标准把「规划」和工具调用、自主决策并列。前两者原本就有，
+    规划这一步以前只存在于模型的隐式推理里，评委看不见也无法核验。
+    这里让模型把计划**作为一次工具调用显式写出来**：步骤由模型自己生成，
+    后端只做长度/数量约束与透传，不预置任何模板，因此它仍是自主规划而不是
+    后端写死的流程。
+    """
+    clean = [str(s).strip() for s in (steps or []) if str(s).strip()][:6]
+    if not clean:
+        return {"error": "计划不能为空"}
+    return {
+        "goal": (goal or "").strip()[:200],
+        "steps": clean,
+        "count": len(clean),
+    }
+
+
 def search_law(query: str, top_k: int = 5) -> dict:
     """检索劳动法条文。返回条号 + 原文，供模型引用时逐字比对。"""
     hits = search(query, top_k=top_k)
@@ -127,6 +146,28 @@ TOOL_SCHEMAS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "plan_tasks",
+            "description": "登记本次任务的执行计划。当请求需要调用 2 个及以上工具，"
+                           "或需要先查依据再算金额/起草文书时，必须**第一个**调用它，"
+                           "把你打算分几步、每步做什么写清楚。步骤由你自己判断，"
+                           "不要用固定模板。简单问候或只需一个工具的直接回答不需要调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string", "description": "这次要帮用户达成的目标，一句话"},
+                    "steps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "有序的执行步骤，2~6 条，每条一句，写明打算调什么工具",
+                    },
+                },
+                "required": ["goal", "steps"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_law",
             "description": "检索中国劳动法条文。凡是需要引用具体法条、条号、原文时，必须先调用它，"
                            "不要凭记忆写法条内容。",
@@ -205,6 +246,7 @@ TOOL_SCHEMAS: list[dict] = [
 
 # name -> 可调用对象。Agent 循环按模型返回的 name 查表
 TOOL_IMPL: dict[str, Callable[..., dict]] = {
+    "plan_tasks": plan_tasks,
     "search_law": search_law,
     "review_contract": review_contract_tool,
     "calc_compensation": calc_compensation_tool,
@@ -213,6 +255,7 @@ TOOL_IMPL: dict[str, Callable[..., dict]] = {
 
 # 中文标签，前端渲染步骤时显示
 TOOL_LABELS = {
+    "plan_tasks": "登记执行计划",
     "search_law": "检索法条",
     "review_contract": "审查合同",
     "calc_compensation": "计算赔偿金",

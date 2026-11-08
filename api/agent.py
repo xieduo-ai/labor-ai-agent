@@ -9,6 +9,7 @@
 不是后端写死的流程。
 
 SSE 事件（前端据此逐条渲染）：
+  plan  -> {"goal": "...", "steps": [...]}   模型自主登记的执行计划（复杂任务第一步）
   step  -> {"kind": "thinking"|"tool_call"|"tool_result", "tool", "label", "detail", "args", "result"}
   token -> {"text": "..."}     最终回答逐字流
   done  -> {"tools_used": [...], "rounds": N}
@@ -29,15 +30,22 @@ import config
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
-# 上限：防止模型陷入无限调工具
-MAX_ROUNDS = 4
+# 上限：防止模型陷入无限调工具。
+# 复杂任务会先花一轮登记执行计划（plan_tasks），所以留 5 轮：
+# 1 规划 + 2~3 个工具 + 1 轮收尾判断。实测「查法条 → 算 2N」用到 4 轮。
+MAX_ROUNDS = 5
 
 SYSTEM_PROMPT = """你是「明契」用工合规助手，服务对象是普通劳动者和小微企业 HR。
 
-你拥有四个工具：search_law（查法条）、calc_compensation（算金额）、
-review_contract（审合同）、draft_arbitration_letter（写仲裁申请书）。
+你拥有五个工具：plan_tasks（登记执行计划）、search_law（查法条）、
+calc_compensation（算金额）、review_contract（审合同）、
+draft_arbitration_letter（写仲裁申请书）。
 
 【硬性规则，违反即为错误回答】
+0. 需要调用 2 个及以上工具，或需要先查依据再算金额/起草文书的复杂请求，
+   **第一步必须调用 plan_tasks** 登记执行计划：写清目标与 2~6 个有序步骤，
+   步骤由你自己判断，不要套模板。计划登记完再按计划逐步执行。
+   简单问候、澄清、只需一个工具就能答完的请求不用登记计划。
 1. 只要回答里要出现法条条号或法条原文，就必须先调用 search_law。
    凭记忆写出「第46条」「第47条」这类条号是禁止的——记错条号会让当事人引错依据。
 2. 只要回答里要出现具体金额，就必须先调用 calc_compensation。
@@ -134,6 +142,8 @@ def _summarize_result(tool: str, result: dict) -> str:
     """把工具返回值压成一行给前端展示，避免把长 JSON 直接铺在界面上。"""
     if "error" in result:
         return f"失败：{result['error']}"
+    if tool == "plan_tasks":
+        return f"已登记 {result.get('count', 0)} 步执行计划"
     if tool == "search_law":
         arts = "、".join(f"{a['law']}{a['article']}" for a in result.get("articles", [])[:4])
         return f"命中 {result.get('count', 0)} 条：{arts}"
@@ -214,6 +224,14 @@ def run_agent_stream(req: AgentRequest) -> Iterator[str]:
                     "detail": _summarize_result(name, result),
                     "result": result,
                 })
+
+                # 规划单独推一类事件：前端渲染成「执行计划」卡片。
+                # 内容来自模型自己生成的 steps，后端不预置模板（见 src/tools.plan_tasks）。
+                if name == "plan_tasks" and "error" not in result:
+                    yield _sse("plan", {
+                        "goal": result.get("goal", ""),
+                        "steps": result.get("steps", []),
+                    })
 
                 messages.append({
                     "role": "tool",
