@@ -17,7 +17,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className={`${geistSans.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/85 backdrop-blur">
+        <header className="sticky top-0 z-50 bg-[#081020]/90 backdrop-blur-md">
           <SiteNav />
         </header>
         <main className="flex-1 flex flex-col">{children}</main>
