@@ -94,16 +94,22 @@ src/qa.py          问答（强制引用 + 资料不足则拒答）
 src/review.py      合同逐条审查（多问题拆分 + 合同期限背景 + closed-set 引用 + 摘录逐字核验）
 src/vision.py      合同照片 / 扫描件识别（视觉模型只做「读字」，不改审查逻辑）
 src/compensation.py 第 47/87 条经济补偿规则（三倍封顶、12 年上限、违法解除 2N）
-src/tools.py       Agent 工具实现 + function calling schema（查法条 / 审合同 / 算赔偿 / 写仲裁申请书）
+src/tools.py       Agent 工具实现 + function calling schema（登记执行计划 / 查法条 / 审合同 / 算赔偿 / 写仲裁申请书）
    ▼
 app.py             Streamlit 界面（评测复现用）
 main.py            FastAPI 后端（Web 版唯一入口）
   ├─ /api/review, /api/review_image, /api/review_text   SSE 流式逐条审查（含多模态识别回显）
-  ├─ /api/agent/stream, /api/agent/run                 多轮 Function Calling 工具循环（SSE 展示调用过程）
+  ├─ /api/agent/stream, /api/agent/run                 规划 + 多轮 Function Calling 工具循环（SSE 展示计划与调用过程）
   ├─ /api/qa, /api/calc, /api/health                   问答 / 赔偿计算 / 探活
   └─ api/review_stream.py, api/agent.py                 流式编排层（不改动已评测的 src/review.py）
-frontend/          Next.js 前端（5 页面，fetch 流式解析 SSE，拍照上传）
+frontend/          Next.js 前端（App Router 5 页面，fetch 流式解析 SSE，拍照上传 + 语音输入/朗读）
+  ├─ components/   可复用组件（风险卡 memo、统计卡、执行计划、引用列表、语音、富文本）
+  └─ error.tsx / global-error.tsx / loading.tsx        错误边界与加载骨架
 ```
+
+多模态覆盖文本、图像（视觉识别转写）、语音（浏览器语音输入 + 本地 TTS 朗读）。
+语音与图像一样只负责「转成文本」，之后复用同一条已评测的 RAG / 审查管线，
+不新增不可核验的生成环节；浏览器不支持时自动隐藏语音入口，不阻塞主流程。
 
 模型分工：问答与审查用 `DeepSeek-V3`（长文本质量），Agent 用 `DeepSeek-V3.1`（实测 V3 在硅基流动
 不总返回原生 `tool_calls`，会把调用写成正文 JSON 的「假调用」），视觉识别用 `Qwen3-VL-30B-A3B`。
