@@ -23,3 +23,41 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* 首页双端分栏：桌面左右分屏，悬停任一侧时该侧展开、另一侧收起。
+   纯 CSS :has() 实现，零 JS、零运行时开销；手机端上下堆叠且不触发展开。
+   尊重 prefers-reduced-motion，避免动画对敏感用户造成干扰。 */
+.dual-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.dual-side {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .dual-panel {
+    flex-direction: row;
+  }
+
+  .dual-side {
+    flex: 1 1 50%;
+    transition: flex-grow 450ms ease;
+  }
+
+  .dual-panel:has(.dual-side:hover) > .dual-side:not(:hover) {
+    flex-grow: 0.72;
+  }
+
+  .dual-panel > .dual-side:hover {
+    flex-grow: 1.28;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dual-side {
+    transition: none;
+  }
+}
