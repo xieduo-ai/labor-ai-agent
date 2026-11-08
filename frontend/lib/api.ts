@@ -64,6 +64,24 @@ export type ReviewStreamEvent =
       chars: number;
     };
 
+// SSE 事件：与后端 api/agent.py 的事件序列一致
+export type AgentStreamEvent =
+  | {
+      event: "step";
+      kind: "tool_call" | "tool_result";
+      tool: string;
+      label: string;
+      /** tool_call 时的入参 */
+      args?: Record<string, unknown>;
+      /** tool_result 时的一行摘要 */
+      detail?: string;
+      /** tool_result 时的完整返回，用于展示法条原文 / 金额构成 */
+      result?: Record<string, unknown>;
+    }
+  | { event: "token"; text: string }
+  | { event: "done"; tools_used: string[]; rounds: number }
+  | { event: "error"; message: string };
+
 // ---------- 请求 ----------
 
 export async function askQA(
@@ -80,29 +98,15 @@ export async function askQA(
 }
 
 /**
- * 流式合同审查：POST 后逐帧读取 SSE（用 fetch 流式读取，因为 EventSource 不支持 POST）。
- * @param payload 粘贴正文传 {text}，文件/图片上传传 FormData（含 file 字段）
- * @param onEvent 每收到一个事件回调一次，调用方据此增量渲染
- * @param path 覆盖接口路径：图片走 /api/review_image
+ * SSE 通用读取：POST 后逐帧解析（EventSource 不支持 POST，所以手写解析）。
+ * 审查和 Agent 两个流式接口共用这一套，避免各写一份解析逻辑。
  */
-export async function streamReview(
-  payload: { text: string } | FormData,
-  onEvent: (ev: ReviewStreamEvent) => void,
-  signal?: AbortSignal,
-  path?: string
+async function sseRequest(
+  url: string,
+  init: RequestInit,
+  onFrame: (ev: Record<string, unknown> & { event: string }) => void
 ): Promise<void> {
-  const isForm = payload instanceof FormData;
-  const url = `${API_BASE}${path ?? (isForm ? "/api/review" : "/api/review_text")}`;
-  const r = await fetch(url, {
-    method: "POST",
-    signal,
-    ...(isForm
-      ? { body: payload }
-      : {
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }),
-  });
+  const r = await fetch(url, init);
 
   if (!r.ok) {
     let detail = "";
@@ -129,12 +133,62 @@ export async function streamReview(
       const frame = buf.slice(0, sep);
       buf = buf.slice(sep + 2);
       const ev = parseSSEFrame(frame);
-      if (ev) onEvent(ev);
+      if (ev) onFrame(ev);
     }
   }
 }
 
-function parseSSEFrame(frame: string): ReviewStreamEvent | null {
+/**
+ * 流式合同审查。
+ * @param payload 粘贴正文传 {text}，文件/图片上传传 FormData（含 file 字段）
+ * @param path 覆盖接口路径：图片走 /api/review_image
+ */
+export async function streamReview(
+  payload: { text: string } | FormData,
+  onEvent: (ev: ReviewStreamEvent) => void,
+  signal?: AbortSignal,
+  path?: string
+): Promise<void> {
+  const isForm = payload instanceof FormData;
+  const url = `${API_BASE}${path ?? (isForm ? "/api/review" : "/api/review_text")}`;
+  await sseRequest(
+    url,
+    {
+      method: "POST",
+      signal,
+      ...(isForm
+        ? { body: payload }
+        : {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          }),
+    },
+    (ev) => onEvent(ev as unknown as ReviewStreamEvent)
+  );
+}
+
+/**
+ * 流式 Agent：逐条推送工具调用/结果，最后逐字输出回答。
+ * 前端把 step 事件渲染成「工具调用时间线」，token 事件拼成最终回答。
+ */
+export async function streamAgent(
+  body: { message: string; history?: Array<{ role: "user" | "assistant"; content: string }>; contract_text?: string },
+  onEvent: (ev: AgentStreamEvent) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  await sseRequest(
+    `${API_BASE}/api/agent/stream`,
+    {
+      method: "POST",
+      signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    (ev) => onEvent(ev as unknown as AgentStreamEvent)
+  );
+}
+
+function parseSSEFrame(frame: string): ({ event: string } & Record<string, unknown>) | null {
   let eventName = "";
   let data = "";
   for (const line of frame.split("\n")) {
@@ -143,7 +197,7 @@ function parseSSEFrame(frame: string): ReviewStreamEvent | null {
   }
   if (!eventName || !data) return null;
   try {
-    return { event: eventName, ...JSON.parse(data) } as ReviewStreamEvent;
+    return { event: eventName, ...JSON.parse(data) };
   } catch {
     return null;
   }
