@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
-import Link from "next/link";
+import { SiteNav } from "@/components/SiteNav";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -17,28 +17,8 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className={`${geistSans.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur">
-          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-            <Link href="/" className="flex shrink-0 items-center gap-2 font-bold text-brand">
-              <span className="text-xl">⚖️</span>
-              <span className="text-sm sm:text-base">用工合规 AI</span>
-            </Link>
-            {/* 窄屏缩小间距并允许横向滚动，图标在大屏才显示 */}
-            <nav className="flex items-center gap-2 overflow-x-auto whitespace-nowrap text-xs sm:gap-6 sm:text-sm">
-              <Link href="/agent" className="hover:text-brand transition-colors">
-                <span className="hidden sm:inline">🤖 </span>智能助手
-              </Link>
-              <Link href="/worker/chat" className="hover:text-worker transition-colors">
-                劳动法问答
-              </Link>
-              <Link href="/review" className="hover:text-brand transition-colors">
-                <span className="hidden sm:inline">📄 </span>审合同
-              </Link>
-              <Link href="/worker/calculator" className="hover:text-worker transition-colors">
-                赔偿计算器
-              </Link>
-            </nav>
-          </div>
+        <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/85 backdrop-blur">
+          <SiteNav />
         </header>
         <main className="flex-1 flex flex-col">{children}</main>
         <footer className="border-t border-white/10 bg-[#081020] py-6 text-center text-xs text-white/40">
