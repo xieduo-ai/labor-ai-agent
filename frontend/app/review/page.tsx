@@ -30,6 +30,10 @@ export default function ReviewPage() {
     () => items.filter((it) => it.risk_level !== "无"),
     [items]
   );
+  const cleanItems = useMemo(
+    () => items.filter((it) => it.risk_level === "无"),
+    [items]
+  );
   const cleanCount = items.length - riskItems.length;
 
   function reset() {
@@ -231,6 +235,22 @@ export default function ReviewPage() {
                 <RiskCard key={i} item={it} />
               ))}
             </div>
+          )}
+
+          {/* 已核对无风险的条款：让报告可复核，而不只是报风险 */}
+          {!loading && cleanItems.length > 0 && (
+            <details className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+              <summary className="cursor-pointer text-xs font-medium text-emerald-800">
+                ✅ 已核对无风险条款（{cleanItems.length} 条）· 点开查看
+              </summary>
+              <ul className="mt-2 space-y-1.5">
+                {cleanItems.map((it, i) => (
+                  <li key={i} className="text-xs leading-relaxed text-emerald-900">
+                    {it.clause_label}：{it.clause.replace(/\s+/g, " ").trim().slice(0, 120)}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
 
           {errors.length > 0 && (

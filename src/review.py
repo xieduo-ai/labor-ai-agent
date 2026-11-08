@@ -104,8 +104,24 @@ def _clause_label(clause: str, seq: int) -> str:
     return f"第{seq}项"
 
 
+# 合同条款常用生活化措辞，未必包含法条术语。例如「离职后二年内不得从事同行业」
+# 不含「竞业限制」四个字，直接拿原文检索会漏掉《劳动合同法》第 23、24 条，
+# 模型只能标「依据不足」。这里只针对已实测会漏检的措辞补检索词，
+# 与通用 TERM_MAP 分开，避免影响口语问答评测集（82.5% Recall@5）的既有结果。
+REVIEW_QUERY_HINTS = [
+    (("竞业", "同行业", "同业", "不得从事"), "竞业限制 经济补偿 劳动合同法第二十三条 第二十四条"),
+]
+
+
+def _review_query(clause: str) -> str:
+    for keys, hint in REVIEW_QUERY_HINTS:
+        if any(k in clause for k in keys):
+            return clause + " " + hint
+    return clause
+
+
 def review_clause(clause: str, contract_ctx: str = "", top_k: int = 6) -> dict:
-    hits = search(clause, top_k=top_k)
+    hits = search(_review_query(clause), top_k=top_k)
     ctx = "\n\n".join(
         f"[{i}] 《{h['law_name']}》{h['article_no']}\n{h['text']}"
         for i, h in enumerate(hits, 1)

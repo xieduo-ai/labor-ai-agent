@@ -156,6 +156,10 @@ export default function Calculator() {
             </div>
           )}
           <p className="mt-4 text-xs leading-relaxed opacity-80">{result.note}</p>
+          <p className="mt-2 text-xs leading-relaxed opacity-75">
+            N 是按工作年限折算的补偿月数（每满一年算一个月）；「× 2」是违法解除按二倍支付，
+            即 2N，依据《劳动合同法》第 47、87 条。
+          </p>
         </div>
       )}
     </div>

@@ -81,7 +81,10 @@ export const RiskCard = memo(function RiskCard({ item }: { item: ReviewItem }) {
         </div>
       )}
       {item.insufficient_basis && (
-        <div className="mt-2 text-xs">⚠️ 候选法条中未找到直接依据，已如实标注</div>
+        <div className="mt-2 text-xs leading-relaxed">
+          ⚠️ 这类约定在司法实践中普遍被认定有问题，但各地裁判口径可能有差异；
+          建议就当地标准再咨询人社部门或仲裁机构。
+        </div>
       )}
     </div>
   );

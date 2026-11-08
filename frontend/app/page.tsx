@@ -82,7 +82,7 @@ export default function Home() {
                   像跟懂法的朋友聊天一样提问，答案逐条带法条原文。
                 </p>
                 <span className="mt-8 inline-flex w-fit rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-transform group-hover:translate-x-1 md:text-base">
-                  问一问 →
+                  开始咨询 →
                 </span>
                 <div className="mt-6 hidden text-xs tracking-widest text-brand/50 md:block">
                   14 部法规 · 678 条原文 · 口语提问也能查到依据
@@ -126,9 +126,12 @@ export default function Home() {
             </Link>
 
             {/* 中缝圆标：pointer-events-none，不挡两侧点击 */}
-            <div className="pointer-events-none absolute left-1/2 top-1/2 z-30 hidden -translate-x-1/2 -translate-y-1/2 md:block">
+            <div className="pointer-events-none absolute left-1/2 top-1/2 z-30 hidden -translate-x-1/2 -translate-y-1/2 md:flex md:flex-col md:items-center">
               <div className="seal-badge flex h-14 w-14 items-center justify-center rounded-full border border-white/40 bg-white text-lg font-medium text-brand shadow-lg">
                 契
+              </div>
+              <div className="mt-2 whitespace-nowrap rounded-full bg-slate-950/45 px-2.5 py-1 text-xs text-white/80">
+                同一份契约 · 两端放心
               </div>
             </div>
           </div>
