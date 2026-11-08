@@ -24,9 +24,8 @@ body {
   color: var(--foreground);
 }
 
-/* 首页双端分栏：桌面左右分屏，悬停任一侧时该侧展开、另一侧收起。
-   纯 CSS :has() 实现，零 JS、零运行时开销；手机端上下堆叠且不触发展开。
-   尊重 prefers-reduced-motion，避免动画对敏感用户造成干扰。 */
+/* 首页双端分栏：桌面左右，鼠标悬停一侧聚焦、另一侧暗下去；手机上下堆叠不触发。
+   全部纯 CSS :has() 实现，零 JS、零运行时开销，并尊重 prefers-reduced-motion。 */
 .dual-panel {
   display: flex;
   flex-direction: column;
@@ -37,6 +36,61 @@ body {
   min-width: 0;
 }
 
+/* 非聚焦侧的暗层：默认全透明，只有「另一侧被悬停」时才亮起 */
+.dim-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0;
+  background: rgba(2, 6, 23, 0.62);
+  transition: opacity 460ms ease;
+}
+
+/* 进入动效：两块从两侧淡入，文案依次上浮，剪影极缓慢呼吸 */
+@keyframes side-in-left {
+  from { opacity: 0; transform: translateX(-30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes side-in-right {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes copy-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes photo-breathe {
+  from { transform: scale(1.02); }
+  to { transform: scale(1.07); }
+}
+@keyframes seal-breathe {
+  from { transform: scale(1); }
+  to { transform: scale(1.06); }
+}
+
+.dual-side:nth-child(1) {
+  animation: side-in-left 720ms cubic-bezier(.22, .61, .36, 1) both;
+}
+.dual-side:nth-child(2) {
+  animation: side-in-right 720ms 100ms cubic-bezier(.22, .61, .36, 1) both;
+}
+.panel-copy > * {
+  animation: copy-rise 560ms cubic-bezier(.22, .61, .36, 1) both;
+}
+.panel-copy > *:nth-child(1) { animation-delay: 280ms; }
+.panel-copy > *:nth-child(2) { animation-delay: 380ms; }
+.panel-copy > *:nth-child(3) { animation-delay: 480ms; }
+.panel-copy > *:nth-child(4) { animation-delay: 580ms; }
+.panel-copy > *:nth-child(5) { animation-delay: 660ms; }
+
+.panel-photo {
+  animation: photo-breathe 16s ease-in-out infinite alternate;
+}
+.seal-badge {
+  animation: seal-breathe 3.2s ease-in-out infinite alternate;
+}
+
 @media (min-width: 768px) {
   .dual-panel {
     flex-direction: row;
@@ -44,21 +98,33 @@ body {
 
   .dual-side {
     flex: 1 1 50%;
-    transition: flex-grow 450ms ease;
+    transition: flex-grow 520ms cubic-bezier(.22, .61, .36, 1);
   }
 
+  /* 聚焦侧展开，非聚焦侧收窄 */
   .dual-panel:has(.dual-side:hover) > .dual-side:not(:hover) {
-    flex-grow: 0.72;
+    flex-grow: 0.68;
+  }
+  .dual-panel > .dual-side:hover {
+    flex-grow: 1.32;
   }
 
-  .dual-panel > .dual-side:hover {
-    flex-grow: 1.28;
+  /* 核心交互：非聚焦侧整体暗下去 */
+  .dual-panel:has(.dual-side:hover) > .dual-side:not(:hover) .dim-shade {
+    opacity: 1;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dual-side {
-    transition: none;
+  .dual-side,
+  .panel-copy > *,
+  .panel-photo,
+  .seal-badge {
+    animation: none !important;
+  }
+  .dual-side,
+  .dim-shade {
+    transition: none !important;
   }
 }
 

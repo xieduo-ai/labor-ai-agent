@@ -19,7 +19,9 @@ const STATS = [
  * - 横版图放进竖长半屏会被裁掉大量左右内容，因此用取自原图天空色的同色渐变
  *   （globals.css 的 .sky-worker / .sky-enterprise）补回左侧纯色面：
  *   文字永远落在干净色块上，右侧剪影完整保留，不是盖灰蒙版。
- * - 黄底用深墨蓝字、蓝底用白字；桌面悬停单侧展开用纯 CSS :has()，手机上下堆叠不展开。
+ * - 黄底用深墨蓝字、蓝底用白字；桌面悬停一侧时该侧聚焦、另一侧变暗（纯 CSS :has()），
+ *   另有一组进入动效（分栏淡入、文案依次上浮、剪影缓慢呼吸、中缝圆标呼吸），
+ *   手机上下堆叠不触发；全部尊重 prefers-reduced-motion。
  * - 功能页 /review、/agent 一律不动：那里是评委核验技术的地方，保持清晰工具风。
  */
 export default function Home() {
@@ -43,10 +45,10 @@ export default function Home() {
                 fill
                 priority
                 sizes="(max-width: 768px) 100vw, 50vw"
-                className="object-cover object-right"
+                className="panel-photo object-cover object-right"
               />
               <div className="sky-worker absolute inset-0" />
-              <div className="absolute inset-0 flex flex-col justify-start px-7 pt-10 text-brand md:px-12 md:pt-16">
+              <div className="panel-copy absolute inset-0 flex flex-col justify-start px-7 pt-10 text-brand md:px-12 md:pt-16">
                 <div className="text-xs font-medium tracking-[0.2em] text-brand/70">
                   FOR WORKERS · 劳动者端
                 </div>
@@ -64,6 +66,7 @@ export default function Home() {
                   14 部法规 · 678 条原文 · 口语提问也能查到依据
                 </div>
               </div>
+              <div className="dim-shade" />
             </Link>
 
             {/* 右：企业 HR · 深钢蓝 */}
@@ -76,10 +79,10 @@ export default function Home() {
                 alt=""
                 fill
                 sizes="(max-width: 768px) 100vw, 50vw"
-                className="object-cover object-right"
+                className="panel-photo object-cover object-right"
               />
               <div className="sky-enterprise absolute inset-0" />
-              <div className="absolute inset-0 flex flex-col justify-start px-7 pt-10 text-white md:px-12 md:pt-16">
+              <div className="panel-copy absolute inset-0 flex flex-col justify-start px-7 pt-10 text-white md:px-12 md:pt-16">
                 <div className="text-xs font-medium tracking-[0.2em] text-sky-200/80">
                   FOR HR · 企业端
                 </div>
@@ -97,18 +100,19 @@ export default function Home() {
                   流式逐条审查 · closed-set 引用 · 报告可导出
                 </div>
               </div>
+              <div className="dim-shade" />
             </Link>
 
             {/* 中缝圆标：pointer-events-none，不挡两侧点击 */}
-            <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 md:block">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/40 bg-white text-lg font-medium text-brand shadow-lg">
+            <div className="pointer-events-none absolute left-1/2 top-1/2 z-30 hidden -translate-x-1/2 -translate-y-1/2 md:block">
+              <div className="seal-badge flex h-14 w-14 items-center justify-center rounded-full border border-white/40 bg-white text-lg font-medium text-brand shadow-lg">
                 契
               </div>
             </div>
           </div>
         </div>
         <p className="mt-3 text-center text-xs text-white/40">
-          桌面端悬停任一侧可展开 · 移动端自动上下排列 · 剪影素材为本项目原创生成
+          桌面端把鼠标移到任意一侧试试：另一侧会自动暗下去 · 移动端上下排列 · 剪影素材为本项目原创生成
         </p>
       </section>
 
