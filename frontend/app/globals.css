@@ -180,9 +180,11 @@ body {
   animation: page-bar 900ms ease-out both;
 }
 
-/* 首屏双栏 → 下方内容区的黄蓝缝合带 */
+/* 首屏 → 下方内容区的纵向过渡：两端颜色与上下区块完全一致，
+   所以不存在横向色带的硬边，只有深浅沿垂直方向平缓沉下去。
+   原来的 90deg 黄→蓝横向渐变会形成一条突兀的分割带，已弃用。 */
 .section-seam {
-  background: linear-gradient(90deg, #B86320 0%, #8a4a2a 28%, #0f2744 62%, #081020 100%);
+  background: linear-gradient(180deg, #0f2744 0%, #102039 45%, #0b1728 100%);
 }
 
 @media (prefers-reduced-motion: reduce) {
