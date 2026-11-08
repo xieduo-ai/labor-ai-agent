@@ -12,4 +12,6 @@ uvicorn>=0.29
 pydantic>=2.6
 python-multipart>=0.0.9
 pdfplumber>=0.11
+# pdfplumber 的 page.to_image() 依赖：扫描版 PDF 逐页渲染成图
+pypdfium2>=4.0
 pillow>=10.0

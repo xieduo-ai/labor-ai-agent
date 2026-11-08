@@ -15,9 +15,12 @@ for _d in (DATA_RAW, DATA_PROCESSED, EVAL_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ---- 生成模型 ----
+# 默认值必须与 .env.example 一致。曾经默认值是 DeepSeek 官方地址 + deepseek-chat，
+# 而生产用硅基流动：Railway 少配一个变量就直接回落，报 400 Model does not exist。
+# 宁可默认就是实际在用的组合，也不要留一个「本地能跑、线上必崩」的隐式回落。
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
-LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.siliconflow.cn/v1")
+LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-ai/DeepSeek-V3")
 
 # ---- 视觉模型（读合同照片/扫描件）----
 # 与 LLM_MODEL 共用同一家服务商，默认走硅基流动的 Qwen3-VL（MoE，30B 激活 3B，约 10s/页）
