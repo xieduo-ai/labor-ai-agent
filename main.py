@@ -8,10 +8,12 @@
 接口一览：
     GET  /api/health       探活
     POST /api/qa           法规问答（带多轮历史，JSON）
-    POST /api/review       合同文件上传（txt/pdf），SSE 流式审查
+    POST /api/calc         经济补偿/赔偿金计算（规则见 src/compensation.py）
+    POST /api/review       合同文件上传（txt/pdf/图片），按内容自动路由，SSE 流式
     POST /api/review_image 合同照片 / 扫描版 PDF（多模态识别后审查），SSE 流式
     POST /api/review_text  合同正文粘贴（JSON），SSE 流式审查
-    POST /api/agent/run    Agent 意图路由（见 api/agent.py）
+    POST /api/agent/stream Agent 工具循环（SSE：工具调用过程 + 逐字回答）
+    POST /api/agent/run    Agent 非流式版本（脚本调用用）
 """
 import io
 import os
@@ -28,6 +30,7 @@ from pydantic import BaseModel
 
 from api.agent import router as agent_router
 from api.review_stream import stream_review, stream_vision_review
+from src.compensation import calc_compensation
 from src.qa import answer
 
 app = FastAPI(title="用工合规 AI Agent API", version="2.2.0")
@@ -63,6 +66,13 @@ class QAResponse(BaseModel):
 
 class ReviewTextRequest(BaseModel):
     text: str
+
+
+class CalcRequest(BaseModel):
+    monthly_wage: float
+    work_years: float
+    scenario: str = "illegal"
+    local_avg_wage: float | None = None
 
 
 # ---------- 工具 ----------
@@ -118,6 +128,24 @@ def qa(req: QARequest):
     )
 
 
+@app.post("/api/calc")
+def calc(req: CalcRequest):
+    """经济补偿/赔偿金计算。
+
+    规则唯一实现放在 src/compensation.py，前端计算器页和 Agent 的
+    calc_compensation 工具都走这里，避免同一套法条口径写两遍。
+    """
+    try:
+        return calc_compensation(
+            monthly_wage=req.monthly_wage,
+            work_years=req.work_years,
+            scenario=req.scenario,
+            local_avg_wage=req.local_avg_wage,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/api/review")
 async def review(file: UploadFile = File(...)):
     """上传合同文件（txt/pdf/图片），SSE 流式返回逐条审查结果。
@@ -156,7 +184,6 @@ async def review_text(req: ReviewTextRequest):
 
 
 MAX_UPLOAD = 10 * 1024 * 1024  # 10MB，手机拍照一般 2-5MB
-
 
 @app.post("/api/review_image")
 async def review_image(file: UploadFile = File(...)):

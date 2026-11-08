@@ -25,6 +25,13 @@ LLM_VL_MODEL = os.getenv("LLM_VL_MODEL", "Qwen/Qwen3-VL-30B-A3B-Instruct")
 VL_MAX_PAGES = int(os.getenv("VL_MAX_PAGES", "3"))   # 单个 PDF 最多识别几页
 VL_MAX_SIDE = int(os.getenv("VL_MAX_SIDE", "1600"))  # 图片长边压缩上限（px）
 
+# ---- Agent 专用模型 ----
+# 实测：DeepSeek-V3 在硅基流动上不总是走 tool_calls 协议，会把调用写成正文里的 JSON
+# （「假调用」，评审一眼能看穿）；V3.1 与 Qwen3-32B 稳定返回原生 tool_calls，
+# 且 V3.1 在「先查法条再算金额」的多工具场景下遵循更一致。
+# 长文本生成（审查/问答）仍用 LLM_MODEL。
+AGENT_MODEL = os.getenv("AGENT_MODEL", "deepseek-ai/DeepSeek-V3.1")
+
 # ---- 向量 / 重排 ----
 EMBED_API_KEY = os.getenv("EMBED_API_KEY", "")
 EMBED_BASE_URL = os.getenv("EMBED_BASE_URL", "https://api.siliconflow.cn/v1")
