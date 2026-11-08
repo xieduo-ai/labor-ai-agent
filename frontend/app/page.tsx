@@ -2,31 +2,53 @@ import Image from "next/image";
 import Link from "next/link";
 
 const STATS = [
-  { label: "法规覆盖", value: "14 部", sub: "678 条原文" },
-  { label: "检索召回率", value: "82.5%", sub: "口语化问题 Recall@5" },
-  { label: "合同风险召回", value: "100%", sub: "19 个人工埋点全部命中" },
-  { label: "引用有效率", value: "100%", sub: "closed-set 零幻觉" },
+  { label: "法规覆盖", value: "14 部", sub: "678 条原文", tone: "text-amber-300" },
+  { label: "检索召回率", value: "82.5%", sub: "口语化问题 Recall@5", tone: "text-sky-300" },
+  { label: "合同风险召回", value: "100%", sub: "19 个人工埋点全部命中", tone: "text-white" },
+  { label: "引用有效率", value: "100%", sub: "closed-set 零幻觉", tone: "text-white" },
+];
+
+const PILLARS = [
+  {
+    tag: "01 · 答得有出处",
+    title: "14 部法规，678 条原文",
+    desc: "检索限定在自建法规库，引用限定在候选条文的闭集内。模型编不出闭集之外的法条，每条依据都能点开看原文。",
+    tone: "text-amber-300",
+    ring: "border-amber-300/25",
+  },
+  {
+    tag: "02 · 算得出数",
+    title: "赔偿不是模型心算的",
+    desc: "第 47、87 条写成确定性规则引擎，三倍封顶、12 年上限、违法解除 2N 都按法条算。涉及金额的提问，Agent 会先查依据再调计算工具。",
+    tone: "text-sky-300",
+    ring: "border-sky-300/25",
+  },
+  {
+    tag: "03 · 错了能暴露",
+    title: "不把不确定包装成满分",
+    desc: "摘录与原文逐字比对，不符就标出；一条引用都没有时指标显示空值并提示结果不完整；文书里模型自行补全的月份与金额会被事实核对拦下来。",
+    tone: "text-white/70",
+    ring: "border-white/15",
+  },
 ];
 
 /**
  * 首页：打开链接即全屏左右双栏——左劳动者（黄金橙）、右企业（深钢蓝）。
  *
  * 设计取舍：
- * - 首屏不设独立 Hero 区，两块各占半个视口且铺满高度，slogan 与硬指标放到滚动后的第二屏，
- *   保证「进去就是左右两块」的沉浸感，同时评委仍能找到数据。
- * - 两张主题剪影为本项目原创生成素材（public/hero-*.webp，合计 66KB），无版权风险；
- *   已裁掉生成工具水印，用 next/image 做尺寸与格式优化。
- * - 横版图放进竖长半屏会被裁掉大量左右内容，因此用取自原图天空色的同色渐变
- *   （globals.css 的 .sky-worker / .sky-enterprise）补回左侧纯色面：
- *   文字永远落在干净色块上，右侧剪影完整保留，不是盖灰蒙版。
- * - 黄底用深墨蓝字、蓝底用白字；桌面悬停一侧时该侧聚焦、另一侧变暗（纯 CSS :has()），
- *   另有一组进入动效（分栏淡入、文案依次上浮、剪影缓慢呼吸、中缝圆标呼吸），
- *   手机上下堆叠不触发；全部尊重 prefers-reduced-motion。
+ * - 首屏不设独立 Hero 区，两块各占半个视口且铺满高度，slogan 与硬指标放到滚动后的深色区。
+ * - 首屏是强对比暗色，若下方直接接纯白会割裂：用一条黄→蓝渐变缝合带过渡，
+ *   下方数据区与主题卡区统一深蓝，footer 同为深色，整页一条线到底。
+ * - 结尾不再放「技术管线」等宽字流程图（像终端日志），换成三张贴主题的卡片；
+ *   真正的技术细节留在 30 页技术文档里。
+ * - 两张主题剪影为本项目原创生成素材（public/hero-*.webp，合计 66KB），无版权风险。
+ * - 横版图放进竖长半屏时用取自原图天空色的同色渐变补回左侧纯色面（globals.css）。
+ * - 黄底用深墨蓝字、蓝底用白字；桌面悬停一侧聚焦、另一侧变暗，纯 CSS :has()。
  * - 功能页 /review、/agent 一律不动：那里是评委核验技术的地方，保持清晰工具风。
  */
 export default function Home() {
   return (
-    <div className="flex-1">
+    <div className="flex-1 bg-[#0b1728]">
       {/* 首屏：全屏左右双栏 */}
       <section className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-brand px-4 pb-5 pt-5 md:px-6">
         <h1 className="sr-only">
@@ -116,46 +138,69 @@ export default function Home() {
         </p>
       </section>
 
-      {/* 第二屏：slogan + 硬指标（评委要找的数字都在这里） */}
-      <section className="bg-white py-16">
+      {/* 黄 → 蓝缝合带：消掉首屏与下方内容区的明暗断层 */}
+      <div className="section-seam h-14" aria-hidden="true" />
+
+      {/* 第二屏：slogan + 硬指标（深色延续，不再突然变白） */}
+      <section className="bg-[#0b1728] py-16 text-white md:py-20">
         <div className="mx-auto max-w-6xl px-4">
-          <h2 className="text-center text-2xl font-bold text-slate-900 md:text-3xl">
+          <h2 className="text-center text-2xl font-bold md:text-3xl">
             让每一份劳动合同，都经得起仲裁庭的检验
           </h2>
-          <p className="mt-3 text-center text-slate-500">
+          <p className="mx-auto mt-3 max-w-2xl text-center text-sm leading-relaxed text-white/55">
             不是「能聊」，是「答得有出处、错了能算出来」。自建 40 题口语化评测集 + 3 份埋坑合同，每一层 RAG 都用数据说话。
           </p>
           <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STATS.map((s) => (
-              <div key={s.label} className="rounded-xl bg-slate-50 p-6 text-center">
-                <div className="text-3xl font-bold text-brand">{s.value}</div>
-                <div className="mt-1 text-sm font-medium text-slate-700">
-                  {s.label}
-                </div>
-                <div className="mt-1 text-xs text-slate-500">{s.sub}</div>
+              <div
+                key={s.label}
+                className="rounded-xl border border-white/10 bg-white/5 p-6 text-center"
+              >
+                <div className={`text-3xl font-bold ${s.tone}`}>{s.value}</div>
+                <div className="mt-1 text-sm font-medium text-white/85">{s.label}</div>
+                <div className="mt-1 text-xs text-white/45">{s.sub}</div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* 技术管线 */}
-      <section className="mx-auto max-w-6xl px-4 py-16">
-        <h2 className="text-center text-2xl font-bold text-slate-900">
-          技术管线
-        </h2>
-        <div className="mt-8 rounded-2xl bg-brand p-8 font-mono text-sm leading-relaxed text-white/90">
-          <div>用户口语提问</div>
-          <div className="text-white/50">↓</div>
-          <div>口语→术语查询扩展（「一倍半」→「百分之一百五十」）</div>
-          <div className="text-white/50">↓</div>
-          <div>双路召回：bge-m3 向量 (0.8) + BM25 (0.2)</div>
-          <div className="text-white/50">↓</div>
-          <div>RRF 融合 → bge-reranker-v2-m3 重排</div>
-          <div className="text-white/50">↓</div>
-          <div>closed-set 强制引用 + 摘录逐字校验</div>
-          <div className="text-white/50">↓</div>
-          <div>带出处的回答 / 合同风险清单</div>
+      {/* 结尾：三张贴主题的文字卡，替代原先像终端日志的技术管线 */}
+      <section className="bg-[#0b1728] pb-20 pt-4">
+        <div className="mx-auto max-w-6xl px-4">
+          <h2 className="text-center text-2xl font-bold text-white">
+            一份合同，两端都该放心
+          </h2>
+          <p className="mt-2 text-center text-sm text-white/50">
+            我们把力气花在「可核验」上，而不是让 AI 说得更像专家
+          </p>
+          <div className="mt-10 grid gap-5 md:grid-cols-3">
+            {PILLARS.map((p) => (
+              <div
+                key={p.tag}
+                className={`rounded-2xl border bg-white/5 p-7 ${p.ring}`}
+              >
+                <div className={`text-xs font-medium tracking-widest ${p.tone}`}>
+                  {p.tag}
+                </div>
+                <h3 className="mt-3 text-xl font-bold text-white">{p.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-white/60">
+                  {p.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-12 text-center">
+            <Link
+              href="/review"
+              className="inline-flex rounded-full bg-worker px-7 py-3 text-sm font-medium text-white transition-transform hover:translate-x-1"
+            >
+              上传一份合同试试 →
+            </Link>
+            <p className="mt-4 text-xs text-white/35">
+              仅供学习研究，不构成法律意见 · 知识库覆盖 14 部劳动法规 / 678 条
+            </p>
+          </div>
         </div>
       </section>
     </div>

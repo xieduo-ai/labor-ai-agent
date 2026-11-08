@@ -151,3 +151,46 @@ body {
     rgba(8, 16, 32, 0) 68%
   );
 }
+
+/* 路由级进入动画（app/template.tsx）：每次导航重新挂载时淡入上浮，
+   顶部一条黄→蓝渐变线呼应首屏左右双栏，导航结束后自动淡出。 */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes page-bar {
+  0% { width: 0; opacity: 1; }
+  75% { width: 100%; opacity: 1; }
+  100% { width: 100%; opacity: 0; }
+}
+
+.page-enter {
+  position: relative;
+  animation: page-enter 560ms cubic-bezier(.22, .61, .36, 1) both;
+}
+
+.page-enter-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  z-index: 40;
+  pointer-events: none;
+  background: linear-gradient(90deg, #B86320 0%, #0f2744 52%, #2563eb 100%);
+  animation: page-bar 900ms ease-out both;
+}
+
+/* 首屏双栏 → 下方内容区的黄蓝缝合带 */
+.section-seam {
+  background: linear-gradient(90deg, #B86320 0%, #8a4a2a 28%, #0f2744 62%, #081020 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter,
+  .page-enter-bar {
+    animation: none !important;
+  }
+  .page-enter-bar {
+    display: none;
+  }
+}

@@ -41,7 +41,7 @@ export default function RootLayout({
           </div>
         </header>
         <main className="flex-1 flex flex-col">{children}</main>
-        <footer className="border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500">
+        <footer className="border-t border-white/10 bg-[#081020] py-6 text-center text-xs text-white/40">
           仅供学习研究，不构成法律意见 · 知识库覆盖 14 部劳动法规 / 678 条
         </footer>
       </body>
