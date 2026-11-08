@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { errMessage, streamAgent, type AgentStreamEvent } from "@/lib/api";
 
 /** 一次工具调用 + 它的结果，合成时间线上的一张卡 */
@@ -110,6 +110,33 @@ function ResultDetail({ step }: { step: ToolStep }) {
       {body(r)}
     </div>
   );
+}
+
+/**
+ * 极简富文本：只把 **加粗** 渲染成 <strong>，其余原样输出。
+ *
+ * 为什么不用 react-markdown：模型输出是不可信文本，为两个星号引一个依赖不值；
+ * 也不用 dangerouslySetInnerHTML，避免 XSS。
+ * 流式输出时 `**` 可能只到了一半，未闭合的标记会按普通文本显示，
+ * 等 token 凑齐后自动变成加粗，所以逐字输出过程中不会闪烁。
+ */
+function RichText({ text }: { text: string }) {
+  const nodes: ReactNode[] = [];
+  const re = /\*\*([\s\S]+?)\*\*/g;
+  let cursor = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > cursor) nodes.push(text.slice(cursor, m.index));
+    nodes.push(
+      <strong key={key++} className="font-semibold text-slate-900">
+        {m[1]}
+      </strong>
+    );
+    cursor = re.lastIndex;
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return <>{nodes}</>;
 }
 
 export default function AgentPage() {
@@ -307,7 +334,7 @@ export default function AgentPage() {
         <div className="mt-4 rounded-2xl bg-white p-5 shadow-sm">
           <div className="mb-2 text-sm font-medium text-slate-700">回答</div>
           <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
-            {answer}
+            <RichText text={answer} />
             {loading && (
               <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-brand align-middle" />
             )}
