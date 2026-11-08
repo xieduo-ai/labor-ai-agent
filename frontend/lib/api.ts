@@ -66,6 +66,8 @@ export type ReviewStreamEvent =
 
 // SSE 事件：与后端 api/agent.py 的事件序列一致
 export type AgentStreamEvent =
+  // 复杂任务第一步：模型自主登记的执行计划（src/tools.plan_tasks）
+  | { event: "plan"; goal: string; steps: string[] }
   | {
       event: "step";
       kind: "tool_call" | "tool_result";

@@ -1,7 +1,21 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { errMessage, streamAgent, type AgentStreamEvent } from "@/lib/api";
+import { AgentPlan } from "@/components/AgentPlan";
+import { RichText } from "@/components/RichText";
+
+// 语音模块含浏览器 API 探测，按需要时才下载（代码分割，不进首屏 bundle）。
+// 两个入口指向同一个 chunk，不会重复打包。
+const VoiceInput = dynamic(
+  () => import("@/components/VoiceInput").then((m) => m.VoiceInput),
+  { ssr: false }
+);
+const SpeakButton = dynamic(
+  () => import("@/components/VoiceInput").then((m) => m.SpeakButton),
+  { ssr: false }
+);
 
 /** 一次工具调用 + 它的结果，合成时间线上的一张卡 */
 interface ToolStep {
@@ -112,33 +126,6 @@ function ResultDetail({ step }: { step: ToolStep }) {
   );
 }
 
-/**
- * 极简富文本：只把 **加粗** 渲染成 <strong>，其余原样输出。
- *
- * 为什么不用 react-markdown：模型输出是不可信文本，为两个星号引一个依赖不值；
- * 也不用 dangerouslySetInnerHTML，避免 XSS。
- * 流式输出时 `**` 可能只到了一半，未闭合的标记会按普通文本显示，
- * 等 token 凑齐后自动变成加粗，所以逐字输出过程中不会闪烁。
- */
-function RichText({ text }: { text: string }) {
-  const nodes: ReactNode[] = [];
-  const re = /\*\*([\s\S]+?)\*\*/g;
-  let cursor = 0;
-  let key = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > cursor) nodes.push(text.slice(cursor, m.index));
-    nodes.push(
-      <strong key={key++} className="font-semibold text-slate-900">
-        {m[1]}
-      </strong>
-    );
-    cursor = re.lastIndex;
-  }
-  if (cursor < text.length) nodes.push(text.slice(cursor));
-  return <>{nodes}</>;
-}
-
 export default function AgentPage() {
   const [input, setInput] = useState("");
   const [steps, setSteps] = useState<ToolStep[]>([]);
@@ -147,9 +134,17 @@ export default function AgentPage() {
   const [error, setError] = useState("");
   const [rounds, setRounds] = useState(0);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [plan, setPlan] = useState<{ goal: string; steps: string[] } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  async function run(msg: string) {
+  // 派生状态缓存：逐 token 追加回答时不重复扫整段文本 / 整个步骤数组
+  const completedCount = useMemo(
+    () => steps.filter((s) => s.status === "done").length,
+    [steps]
+  );
+  const speakText = useMemo(() => answer.replace(/\*\*/g, ""), [answer]);
+
+  const run = useCallback(async (msg: string) => {
     if (!msg.trim()) return;
     setLoading(true);
     setSteps([]);
@@ -157,6 +152,7 @@ export default function AgentPage() {
     setError("");
     setRounds(0);
     setExpanded(null);
+    setPlan(null);
 
     const ac = new AbortController();
     abortRef.current = ac;
@@ -164,6 +160,9 @@ export default function AgentPage() {
     try {
       await streamAgent({ message: msg }, (ev: AgentStreamEvent) => {
         switch (ev.event) {
+          case "plan":
+            setPlan({ goal: ev.goal, steps: ev.steps });
+            break;
           case "step":
             if (ev.kind === "tool_call") {
               setSteps((prev) => [
@@ -201,7 +200,7 @@ export default function AgentPage() {
       setLoading(false);
       abortRef.current = null;
     }
-  }
+  }, []);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -211,13 +210,19 @@ export default function AgentPage() {
       </p>
 
       <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          rows={3}
-          placeholder="例：我在公司干了3年，月薪8000，昨天突然被辞退，能拿多少钱？"
-          className="w-full rounded-lg border border-slate-300 p-3 text-sm"
-        />
+        <div className="flex items-start gap-2">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            rows={3}
+            placeholder="例：我在公司干了3年，月薪8000，昨天突然被辞退，能拿多少钱？"
+            className="w-full rounded-lg border border-slate-300 p-3 text-sm"
+          />
+          <VoiceInput
+            onText={(t) => setInput((prev) => (prev ? `${prev} ${t}` : t))}
+            disabled={loading}
+          />
+        </div>
         <button
           onClick={() => run(input)}
           disabled={loading || !input.trim()}
@@ -238,6 +243,9 @@ export default function AgentPage() {
         </div>
       </div>
 
+      {/* 执行计划：模型自主登记，放在时间线之前，让「规划」这一层可被核验 */}
+      {plan && <AgentPlan goal={plan.goal} steps={plan.steps} />}
+
       {/* 工具调用时间线：入参和结果全部亮出来，证明是真调用 */}
       {steps.length > 0 && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
@@ -246,7 +254,7 @@ export default function AgentPage() {
             Agent 执行过程
             {rounds > 0 && (
               <span className="ml-auto text-xs font-normal text-slate-400">
-                {rounds} 轮决策 · {steps.length} 次工具调用
+                {rounds} 轮决策 · {completedCount}/{steps.length} 次工具已完成
               </span>
             )}
           </div>
@@ -332,7 +340,10 @@ export default function AgentPage() {
       {/* 最终回答：逐字流式输出 */}
       {(answer || loading) && (
         <div className="mt-4 rounded-2xl bg-white p-5 shadow-sm">
-          <div className="mb-2 text-sm font-medium text-slate-700">回答</div>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-sm font-medium text-slate-700">回答</div>
+            {!loading && <SpeakButton text={speakText} />}
+          </div>
           <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
             <RichText text={answer} />
             {loading && (

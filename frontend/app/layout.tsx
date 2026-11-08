@@ -19,19 +19,20 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-            <Link href="/" className="flex items-center gap-2 font-bold text-brand">
+            <Link href="/" className="flex shrink-0 items-center gap-2 font-bold text-brand">
               <span className="text-xl">⚖️</span>
-              <span>用工合规 AI</span>
+              <span className="text-sm sm:text-base">用工合规 AI</span>
             </Link>
-            <nav className="flex items-center gap-6 text-sm">
+            {/* 窄屏缩小间距并允许横向滚动，图标在大屏才显示 */}
+            <nav className="flex items-center gap-2 overflow-x-auto whitespace-nowrap text-xs sm:gap-6 sm:text-sm">
               <Link href="/agent" className="hover:text-brand transition-colors">
-                🤖 智能助手
+                <span className="hidden sm:inline">🤖 </span>智能助手
               </Link>
               <Link href="/worker/chat" className="hover:text-worker transition-colors">
                 劳动法问答
               </Link>
               <Link href="/review" className="hover:text-brand transition-colors">
-                📄 审合同
+                <span className="hidden sm:inline">📄 </span>审合同
               </Link>
               <Link href="/worker/calculator" className="hover:text-worker transition-colors">
                 赔偿计算器

@@ -1,7 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { askQA, errMessage, type QASource } from "@/lib/api";
+import { RichText } from "@/components/RichText";
+import { SourceList } from "@/components/SourceList";
+
+// 语音按需加载，不进首屏 bundle；浏览器不支持时组件会自动隐藏
+const VoiceInput = dynamic(
+  () => import("@/components/VoiceInput").then((m) => m.VoiceInput),
+  { ssr: false }
+);
+const SpeakButton = dynamic(
+  () => import("@/components/VoiceInput").then((m) => m.SpeakButton),
+  { ssr: false }
+);
 
 interface Msg {
   role: "user" | "assistant";
@@ -87,23 +100,12 @@ export default function WorkerChat() {
               }`}
             >
               <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                {m.content}
+                <RichText text={m.content} />
               </div>
-              {m.sources && m.sources.length > 0 && (
-                <div className="mt-3 border-t border-slate-100 pt-2">
-                  <div className="mb-1 text-xs font-medium text-slate-500">
-                    📚 引用法条（{m.sources.length} 条）
-                  </div>
-                  {m.sources.map((s, j) => (
-                    <div key={j} className="mt-1 text-xs text-slate-600">
-                      <span className="font-medium text-brand">
-                        《{s.law_name}》{s.article_no}
-                      </span>
-                      {s.text && (
-                        <span className="ml-1 text-slate-400">— {s.text.slice(0, 60)}…</span>
-                      )}
-                    </div>
-                  ))}
+              <SourceList sources={m.sources} />
+              {m.role === "assistant" && (
+                <div className="mt-2 text-right">
+                  <SpeakButton text={m.content} />
                 </div>
               )}
             </div>
@@ -115,18 +117,19 @@ export default function WorkerChat() {
       </div>
 
       {/* 输入框 */}
-      <div className="flex gap-2 border-t border-slate-200 pt-4">
+      <div className="flex items-center gap-2 border-t border-slate-200 pt-4">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send(input)}
           placeholder="例：公司让我周末加班但不给加班费，合法吗？"
-          className="flex-1 rounded-full border border-slate-300 px-5 py-3 text-sm focus:border-worker focus:outline-none"
+          className="min-w-0 flex-1 rounded-full border border-slate-300 px-4 py-3 text-sm focus:border-worker focus:outline-none sm:px-5"
         />
+        <VoiceInput onText={(t) => setInput((prev) => (prev ? `${prev} ${t}` : t))} disabled={loading} />
         <button
           onClick={() => send(input)}
           disabled={loading}
-          className="rounded-full bg-worker px-6 py-3 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          className="shrink-0 rounded-full bg-worker px-4 py-3 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 sm:px-6"
         >
           发送
         </button>

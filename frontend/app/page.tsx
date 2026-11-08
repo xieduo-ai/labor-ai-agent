@@ -86,7 +86,7 @@ export default function Home() {
           <p className="mt-2 text-center text-slate-500">
             自建 40 题口语化评测集 + 3 份埋坑合同，每一层 RAG 都用数据说话
           </p>
-          <div className="mt-10 grid grid-cols-2 gap-6 md:grid-cols-4">
+          <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STATS.map((s) => (
               <div key={s.label} className="rounded-xl bg-slate-50 p-6 text-center">
                 <div className="text-3xl font-bold text-brand">{s.value}</div>

@@ -1,28 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   errMessage,
   streamReview,
   type ReviewItem,
   type ReviewSummary,
 } from "@/lib/api";
-
-const LEVEL_STYLE: Record<string, string> = {
-  高: "bg-red-50 border-red-200 text-red-700",
-  中: "bg-amber-50 border-amber-200 text-amber-700",
-  低: "bg-yellow-50 border-yellow-200 text-yellow-700",
-  无: "bg-green-50 border-green-200 text-green-700",
-  未知: "bg-slate-50 border-slate-200 text-slate-600",
-};
-
-const LEVEL_DOT: Record<string, string> = {
-  高: "🔴",
-  中: "🟠",
-  低: "🟡",
-  无: "🟢",
-  未知: "⚪",
-};
+import { ReviewStats, RiskCard } from "@/components/ReviewParts";
 
 export default function ReviewPage() {
   const [text, setText] = useState("");
@@ -39,7 +24,11 @@ export default function ReviewPage() {
   const [errors, setErrors] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
-  const riskItems = items.filter((it) => it.risk_level !== "无");
+  // 流式每到达一条就 setState，缓存派生列表避免重复过滤整个数组
+  const riskItems = useMemo(
+    () => items.filter((it) => it.risk_level !== "无"),
+    [items]
+  );
   const cleanCount = items.length - riskItems.length;
 
   function reset() {
@@ -111,10 +100,11 @@ export default function ReviewPage() {
     await start(fd, isImage ? "/api/review_image" : "/api/review");
   }
 
-  const progressPct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
-  // 没有引用时后端返回 null，显示「—」而不是伪造 100%
-  const rate = (v: number | null) =>
-    v == null ? "—" : `${(v * 100).toFixed(1)}%`;
+  const progressPct = useMemo(
+    () => (total > 0 ? Math.round((reviewed / total) * 100) : 0),
+    [reviewed, total]
+  );
+  // 引用有效率为 null 时显示「—」而不是伪造 100%，口径在 ReviewStats 里统一实现
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -223,31 +213,8 @@ export default function ReviewPage() {
             </div>
           )}
 
-          {/* 汇总：done 事件到达后显示 */}
-          {summary && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-4 gap-3">
-                <Stat label="条款" value={summary.clauses} />
-                <Stat label="🔴 高风险" value={summary.high} danger />
-                <Stat label="🟠 中风险" value={summary.mid} warn />
-                <Stat label="🟡 低风险" value={summary.low} />
-              </div>
-              {/* 有条款失败时先亮出「结果不完整」，避免 0 风险被误读成「合同没问题」 */}
-              {summary.failed > 0 && (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-relaxed text-red-700">
-                  ⚠️ 有 {summary.failed} 条审查失败，本次结果<strong>不完整</strong>，下面的风险统计仅覆盖成功的{" "}
-                  {summary.clauses - summary.failed} 条，不能作为「合同无风险」的结论。
-                </div>
-              )}
-              {/* 引用可信度：closed-set 校验是本项目的核心卖点，直接亮出来 */}
-              <div className="rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
-                引用有效率 {rate(summary.citation_valid_rate)} · 摘录逐字率{" "}
-                {rate(summary.quote_match_rate)} · 另有 {cleanCount} 条条款未发现明显风险
-                {summary.insufficient_basis > 0 &&
-                  ` · ${summary.insufficient_basis} 条已标注「依据不足」`}
-              </div>
-            </div>
-          )}
+          {/* 汇总：done 事件到达后显示（统计卡/失败提示/引用指标已抽成可复用组件） */}
+          {summary && <ReviewStats summary={summary} cleanCount={cleanCount} />}
 
           {/* 风险清单：逐条到达、逐条渲染 */}
           {riskItems.length > 0 && (
@@ -271,61 +238,5 @@ export default function ReviewPage() {
   );
 }
 
-function Stat({
-  label,
-  value,
-  danger,
-  warn,
-}: {
-  label: string;
-  value: number;
-  danger?: boolean;
-  warn?: boolean;
-}) {
-  return (
-    <div className="rounded-xl bg-white p-3 text-center shadow-sm">
-      <div
-        className={`text-2xl font-bold ${
-          danger ? "text-red-600" : warn ? "text-amber-600" : "text-slate-900"
-        }`}
-      >
-        {value}
-      </div>
-      <div className="mt-1 text-xs text-slate-500">{label}</div>
-    </div>
-  );
-}
-
-function RiskCard({ item }: { item: ReviewItem }) {
-  return (
-    <div className={`rounded-xl border p-4 ${LEVEL_STYLE[item.risk_level] || LEVEL_STYLE["未知"]}`}>
-      <div className="font-medium">
-        {LEVEL_DOT[item.risk_level]} {item.risk_type} · {item.clause_label}
-      </div>
-      <div className="mt-2 text-sm">
-        <strong>问题：</strong>
-        {item.issue}
-      </div>
-      {item.suggestion && (
-        <div className="mt-1 text-sm">
-          <strong>建议：</strong>
-          {item.suggestion}
-        </div>
-      )}
-      {item.legal_basis.length > 0 && (
-        <div className="mt-2 border-t border-current/10 pt-2 text-xs">
-          {item.legal_basis.map((b, i) => (
-            <div key={i} className="mt-1">
-              《{b.law}》{b.article}{" "}
-              {b.exists ? (b.quote_ok ? "✅ 原文核对一致" : "⚠️ 摘录与原文不符") : "⚠️ 依据存疑"}
-              {b.quote && <span className="ml-1 opacity-70">— {b.quote}</span>}
-            </div>
-          ))}
-        </div>
-      )}
-      {item.insufficient_basis && (
-        <div className="mt-2 text-xs">⚠️ 候选法条中未找到直接依据，已如实标注</div>
-      )}
-    </div>
-  );
-}
+// 统计卡与风险卡已抽到 components/ReviewParts.tsx 复用。
+// RiskCard 用 memo 包裹：流式审查每追加一条，只渲染新增的那张卡。
