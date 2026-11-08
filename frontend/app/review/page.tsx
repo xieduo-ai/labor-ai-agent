@@ -8,6 +8,7 @@ import {
   type ReviewSummary,
 } from "@/lib/api";
 import { ReviewStats, RiskCard } from "@/components/ReviewParts";
+import { ExportReport } from "@/components/ExportReport";
 
 export default function ReviewPage() {
   const [text, setText] = useState("");
@@ -214,7 +215,14 @@ export default function ReviewPage() {
           )}
 
           {/* 汇总：done 事件到达后显示（统计卡/失败提示/引用指标已抽成可复用组件） */}
-          {summary && <ReviewStats summary={summary} cleanCount={cleanCount} />}
+          {summary && (
+            <>
+              <ReviewStats summary={summary} cleanCount={cleanCount} />
+              <div className="flex justify-end">
+                <ExportReport items={items} summary={summary} />
+              </div>
+            </>
+          )}
 
           {/* 风险清单：逐条到达、逐条渲染 */}
           {riskItems.length > 0 && (
