@@ -18,10 +18,17 @@ const SERVER_FALSE = () => false;
  *   信息的 webm/opus，Chrome 解码常得到异常 duration，重采样后会编出近乎空的
  *   WAV，ASR 返回空文本（表现为「一直没听清」）。改为 ScriptProcessor 直接采
  *   PCM 再自行编码 16kHz 单声道 WAV，全程不碰 webm，音频内容完全可控。
+ * - 关闭浏览器 AGC / 降噪：自动增益对微弱输入会产生「几乎不动、偶尔猛跳」的
+ *   抽动，还会把弱语音压平，所以拿原始信号。**不做增益放大**：实测把同一段
+ *   中文语音振幅压到 0.02 倍，SenseVoice 仍完整识别，说明幅度不是识别成败的
+ *   因素，放大只会把底噪一起抬起来。
+ * - 识别为空时提供「试听刚录的声音」：后端链路、WAV 编码、幅度均已用
+ *   TTS→ASR 回环与编码复刻实验排除，剩下只可能是采集端没收到人声（输入设备
+ *   选错 / 系统静音 / 离麦太远）。让用户直接听自己录到什么，比继续猜更有效。
  * - 仍然只是「转文本 → 复用既有 RAG / Agent 管线」，识别文本回显输入框供核对，
  *   不引入新的不可核验环节；音频只转发、不落盘、不存储。
- * - 完全降级安全：不支持就安静隐藏；录音太短、音量过低或识别失败都给明确
- *   中文提示并降级手动输入，绝不阻塞主流程。朗读走本地 TTS，不依赖网络。
+ * - 完全降级安全：不支持就安静隐藏；录音太短或识别失败都给明确中文提示，
+ *   绝不阻塞主流程。朗读走本地 TTS，不依赖网络。
  * - 这个模块通过 next/dynamic 按需加载，不进首屏 bundle。
  */
 
@@ -82,16 +89,18 @@ export function VoiceInput({
   const [phase, setPhase] = useState<Phase>("idle");
   const [hint, setHint] = useState("");
   const [level, setLevel] = useState(0); // 实时输入音量，用来区分「没声音」和「识别不出」
+  const [replayUrl, setReplayUrl] = useState(""); // 最近一次录音的本地试听地址
   const streamRef = useRef<MediaStream | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const srcRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const procRef = useRef<ScriptProcessorNode | null>(null);
   const pcmRef = useRef<Float32Array[]>([]);
   const peakRef = useRef(0);
+  const replayUrlRef = useRef("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 卸载时释放麦克风、音频节点与定时器；直接操作 ref，不改 state
+  // 卸载时释放麦克风、音频节点、试听地址与定时器；直接操作 ref，不改 state
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -103,6 +112,7 @@ export function VoiceInput({
       srcRef.current?.disconnect();
       void ctxRef.current?.close();
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (replayUrlRef.current) URL.revokeObjectURL(replayUrlRef.current);
     };
   }, []);
 
@@ -131,7 +141,7 @@ export function VoiceInput({
     return rate;
   }
 
-  async function upload(blob: Blob, seconds: number) {
+  async function upload(blob: Blob, seconds: number, diag: string) {
     try {
       const fd = new FormData();
       fd.append("file", blob, "audio.wav");
@@ -144,7 +154,7 @@ export function VoiceInput({
       const text = (data.text || "").trim();
       if (!text) {
         setHint(
-          `没识别到内容（录音 ${seconds.toFixed(1)} 秒 / ${Math.round(blob.size / 1024)}KB），请靠近麦克风说慢一点，或直接打字`
+          `没识别到内容（录音 ${seconds.toFixed(1)} 秒 / ${Math.round(blob.size / 1024)}KB${diag}），点下方试听确认是否录到人声`
         );
       } else {
         // 回显到输入框，用户核对后才发送——和图片识别原文回显是同一个可核验逻辑
@@ -172,11 +182,6 @@ export function VoiceInput({
       setHint("说得太短，请说满 1 秒以上，或直接打字");
       return;
     }
-    if (peakRef.current < 0.01) {
-      setPhase("idle");
-      setHint("麦克风几乎没收到声音，请检查系统输入设备与音量，或直接打字");
-      return;
-    }
     const merged = new Float32Array(total);
     let off = 0;
     for (const c of chunks) {
@@ -184,9 +189,17 @@ export function VoiceInput({
       off += c.length;
     }
     const wav = encodeWav(merged, rate);
+
+    // 保留本地副本供用户试听：这是区分「设备没收到人声」与「识别失败」的唯一直接手段
+    if (replayUrlRef.current) URL.revokeObjectURL(replayUrlRef.current);
+    const url = URL.createObjectURL(wav);
+    replayUrlRef.current = url;
+    setReplayUrl(url);
+
+    const diag = `，峰值 ${(peakRef.current * 100).toFixed(1)}%`;
     setPhase("uploading");
-    setHint(`正在识别…（${seconds.toFixed(1)} 秒 / ${Math.round(wav.size / 1024)}KB）`);
-    void upload(wav, seconds);
+    setHint(`正在识别…（${seconds.toFixed(1)} 秒 / ${Math.round(wav.size / 1024)}KB${diag}）`);
+    void upload(wav, seconds, diag);
   }
 
   async function toggle() {
@@ -200,9 +213,11 @@ export function VoiceInput({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          // 关掉浏览器自动增益/降噪：对微弱输入它们会「压平 + 偶尔猛跳」，
+          // 拿原始信号即可（实测 ASR 对幅度不敏感，无需再做放大）
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
         },
       });
       streamRef.current = stream;
@@ -227,7 +242,8 @@ export function VoiceInput({
           if (a > peak) peak = a;
         }
         peakRef.current = Math.max(peakRef.current, peak);
-        setLevel(Math.min(1, Math.sqrt(sum / input.length) * 6));
+        // ×16 让轻声音量也能看见，避免「几乎不动」看不出是在收音
+        setLevel(Math.min(1, Math.sqrt(sum / input.length) * 16));
       };
       src.connect(proc);
       proc.connect(mute);
@@ -250,7 +266,7 @@ export function VoiceInput({
       {phase === "recording" && (
         <div
           className="absolute -top-2 h-1 w-11 overflow-hidden rounded-full bg-slate-200"
-          title="实时输入音量"
+          title="实时输入音量（已放大显示）"
         >
           <div
             className="h-full bg-worker transition-[width] duration-100"
@@ -289,6 +305,18 @@ export function VoiceInput({
       {hint && (
         <span className="absolute mt-12 w-52 rounded-lg bg-slate-800 px-2 py-1 text-center text-[11px] leading-snug text-white">
           {hint}
+          {replayUrl && (
+            <button
+              type="button"
+              onClick={() => {
+                const a = new Audio(replayUrl);
+                void a.play().catch(() => setHint("试听播放失败，请直接打字"));
+              }}
+              className="mt-1 block w-full text-center text-[11px] text-amber-300 underline"
+            >
+              🔈 试听刚录的声音
+            </button>
+          )}
         </span>
       )}
     </div>
