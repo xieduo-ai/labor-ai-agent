@@ -9,18 +9,19 @@ const NOOP_SUBSCRIBE = () => () => {};
 const SERVER_FALSE = () => false;
 
 /**
- * 语音模态：输入用 MediaRecorder 录音 → 服务端 ASR 转文字；输出用本地 speechSynthesis。
+ * 语音模态：输入用 Web Audio 直接采 PCM → 服务端 ASR 转文字；输出用本地 speechSynthesis。
  *
  * 设计取舍（写清楚，免得被当成「为了评分硬凑」）：
- * - 不用浏览器内置 SpeechRecognition：Chrome/Edge 的实现会把音频送到 Google 在线
- *   识别服务，国内网络稳定返回 network 错误，等于功能不可用。改为前端录音、
- *   后端转发到硅基流动 SenseVoiceSmall，识别结果回显进输入框供用户核对后才发送。
- * - 仍然只是「转文本 → 复用既有 RAG / Agent 管线」，和图片识别一致，
+ * - 不用浏览器内置 SpeechRecognition：Chrome/Edge 的实现把音频送到 Google 在线
+ *   识别服务，国内网络稳定返回 network 错误，等于功能不可用。
+ * - 也不用 MediaRecorder + decodeAudioData 那条路：MediaRecorder 产出的是无时长
+ *   信息的 webm/opus，Chrome 解码常得到异常 duration，重采样后会编出近乎空的
+ *   WAV，ASR 返回空文本（表现为「一直没听清」）。改为 ScriptProcessor 直接采
+ *   PCM 再自行编码 16kHz 单声道 WAV，全程不碰 webm，音频内容完全可控。
+ * - 仍然只是「转文本 → 复用既有 RAG / Agent 管线」，识别文本回显输入框供核对，
  *   不引入新的不可核验环节；音频只转发、不落盘、不存储。
- * - MediaRecorder 产出 webm/opus，统一重采样成 16kHz 单声道 PCM16 WAV 再上传，
- *   避开服务端格式兼容问题并压缩体积；转换失败则回退原始 blob。
- * - 完全降级安全：浏览器不支持录音就安静隐藏；失败给中性中文提示，
- *   用户直接打字即可，绝不阻塞主流程。朗读走浏览器本地 TTS，不依赖网络。
+ * - 完全降级安全：不支持就安静隐藏；录音太短、音量过低或识别失败都给明确
+ *   中文提示并降级手动输入，绝不阻塞主流程。朗读走本地 TTS，不依赖网络。
  * - 这个模块通过 next/dynamic 按需加载，不进首屏 bundle。
  */
 
@@ -29,53 +30,43 @@ function canRecord(): boolean {
   return (
     typeof navigator !== "undefined" &&
     !!navigator.mediaDevices?.getUserMedia &&
-    typeof MediaRecorder !== "undefined"
+    typeof AudioContext !== "undefined"
   );
 }
 
-/** webm/opus → 16kHz 单声道 PCM16 WAV，纯浏览器实现，无第三方依赖 */
-async function toWav(blob: Blob): Promise<Blob> {
-  const ctx = new AudioContext();
-  try {
-    const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
-    const rate = 16000;
-    const frames = Math.max(1, Math.ceil(decoded.duration * rate));
-    const offline = new OfflineAudioContext(1, frames, rate);
-    const src = offline.createBufferSource();
-    src.buffer = decoded;
-    src.connect(offline.destination);
-    src.start();
-    const rendered = await offline.startRendering();
-    const pcm = rendered.getChannelData(0);
+/** Float32 PCM → 16kHz 单声道 PCM16 WAV，线性插值重采样，纯浏览器实现 */
+function encodeWav(samples: Float32Array, inRate: number): Blob {
+  const rate = 16000;
+  const frames = Math.max(1, Math.floor((samples.length * rate) / inRate));
+  const out = new ArrayBuffer(44 + frames * 2);
+  const v = new DataView(out);
+  const put = (off: number, s: string) => {
+    for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i));
+  };
+  put(0, "RIFF");
+  v.setUint32(4, 36 + frames * 2, true);
+  put(8, "WAVE");
+  put(12, "fmt ");
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true);
+  v.setUint32(28, rate * 2, true);
+  v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true);
+  put(36, "data");
+  v.setUint32(40, frames * 2, true);
 
-    const out = new ArrayBuffer(44 + frames * 2);
-    const v = new DataView(out);
-    const put = (off: number, s: string) => {
-      for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i));
-    };
-    put(0, "RIFF");
-    v.setUint32(4, 36 + frames * 2, true);
-    put(8, "WAVE");
-    put(12, "fmt ");
-    v.setUint32(16, 16, true);
-    v.setUint16(20, 1, true);
-    v.setUint16(22, 1, true);
-    v.setUint32(24, rate, true);
-    v.setUint32(28, rate * 2, true);
-    v.setUint16(32, 2, true);
-    v.setUint16(34, 16, true);
-    put(36, "data");
-    v.setUint32(40, frames * 2, true);
-    let off = 44;
-    for (let i = 0; i < frames; i++) {
-      const s = Math.max(-1, Math.min(1, pcm[i]));
-      v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-      off += 2;
-    }
-    return new Blob([out], { type: "audio/wav" });
-  } finally {
-    await ctx.close();
+  for (let i = 0; i < frames; i++) {
+    const pos = (i * inRate) / rate;
+    const i0 = Math.floor(pos);
+    const frac = pos - i0;
+    const a = samples[i0] ?? 0;
+    const b = samples[Math.min(i0 + 1, samples.length - 1)] ?? 0;
+    const s = Math.max(-1, Math.min(1, a * (1 - frac) + b * frac));
+    v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
   }
+  return new Blob([out], { type: "audio/wav" });
 }
 
 type Phase = "idle" | "recording" | "uploading";
@@ -90,54 +81,60 @@ export function VoiceInput({
   const supported = useSyncExternalStore(NOOP_SUBSCRIBE, canRecord, SERVER_FALSE);
   const [phase, setPhase] = useState<Phase>("idle");
   const [hint, setHint] = useState("");
-  const recRef = useRef<MediaRecorder | null>(null);
+  const [level, setLevel] = useState(0); // 实时输入音量，用来区分「没声音」和「识别不出」
   const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const srcRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const procRef = useRef<ScriptProcessorNode | null>(null);
+  const pcmRef = useRef<Float32Array[]>([]);
+  const peakRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 卸载时释放麦克风与定时器；直接操作 ref，不改 state，不触发级联渲染
+  // 卸载时释放麦克风、音频节点与定时器；直接操作 ref，不改 state
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+      if (procRef.current) {
+        procRef.current.onaudioprocess = null;
+        procRef.current.disconnect();
+      }
+      srcRef.current?.disconnect();
+      void ctxRef.current?.close();
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
   if (!supported) return null; // 不支持就安静地消失，不占用界面
 
-  function releaseStream() {
+  /** 拆掉音频链，返回录音时的实际采样率 */
+  function teardownAudio(): number {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+    const proc = procRef.current;
+    if (proc) {
+      proc.onaudioprocess = null;
+      proc.disconnect();
+      procRef.current = null;
+    }
+    srcRef.current?.disconnect();
+    srcRef.current = null;
+    const ctx = ctxRef.current;
+    const rate = ctx?.sampleRate ?? 48000;
+    if (ctx) void ctx.close();
+    ctxRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
-    recRef.current = null;
+    return rate;
   }
 
-  async function submit() {
-    const chunks = chunksRef.current;
-    releaseStream();
-    if (chunks.length === 0) {
-      setPhase("idle");
-      setHint("没录到声音，请直接打字");
-      return;
-    }
-    setPhase("uploading");
-    setHint("正在识别…");
-    let blob = new Blob(chunks, { type: chunks[0].type || "audio/webm" });
-    let filename = "audio.webm";
-    try {
-      blob = await toWav(blob);
-      filename = "audio.wav";
-    } catch {
-      // 解码失败就用原始录音格式，服务端仍会尝试识别
-    }
+  async function upload(blob: Blob, seconds: number) {
     try {
       const fd = new FormData();
-      fd.append("file", blob, filename);
+      fd.append("file", blob, "audio.wav");
       const r = await fetch(`${API_BASE}/api/transcribe`, {
         method: "POST",
         body: fd,
@@ -146,7 +143,9 @@ export function VoiceInput({
       const data = (await r.json()) as { text?: string };
       const text = (data.text || "").trim();
       if (!text) {
-        setHint("没听清，请靠近麦克风再试，或直接打字");
+        setHint(
+          `没识别到内容（录音 ${seconds.toFixed(1)} 秒 / ${Math.round(blob.size / 1024)}KB），请靠近麦克风说慢一点，或直接打字`
+        );
       } else {
         // 回显到输入框，用户核对后才发送——和图片识别原文回显是同一个可核验逻辑
         onText(text);
@@ -158,40 +157,89 @@ export function VoiceInput({
       setHint("语音识别暂不可用，请直接打字");
     } finally {
       setPhase("idle");
+      setLevel(0);
     }
+  }
+
+  function stop() {
+    const rate = teardownAudio();
+    setLevel(0);
+    const chunks = pcmRef.current;
+    const total = chunks.reduce((n, a) => n + a.length, 0);
+    const seconds = total / rate;
+    if (seconds < 0.4) {
+      setPhase("idle");
+      setHint("说得太短，请说满 1 秒以上，或直接打字");
+      return;
+    }
+    if (peakRef.current < 0.01) {
+      setPhase("idle");
+      setHint("麦克风几乎没收到声音，请检查系统输入设备与音量，或直接打字");
+      return;
+    }
+    const merged = new Float32Array(total);
+    let off = 0;
+    for (const c of chunks) {
+      merged.set(c, off);
+      off += c.length;
+    }
+    const wav = encodeWav(merged, rate);
+    setPhase("uploading");
+    setHint(`正在识别…（${seconds.toFixed(1)} 秒 / ${Math.round(wav.size / 1024)}KB）`);
+    void upload(wav, seconds);
   }
 
   async function toggle() {
     if (phase === "uploading") return;
     if (phase === "recording") {
-      const rec = recRef.current;
-      if (rec && rec.state !== "inactive") rec.stop(); // 触发 onstop → submit
-      else void submit();
+      stop();
       return;
     }
     setHint("");
+    setLevel(0);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "";
-      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-      chunksRef.current = [];
-      rec.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+      const ctx = new AudioContext();
+      await ctx.resume();
+      const src = ctx.createMediaStreamSource(stream);
+      const proc = ctx.createScriptProcessor(4096, 1, 1);
+      // 必须接到 destination 才会持续触发 onaudioprocess；串一个 gain=0 避免回放啸叫
+      const mute = ctx.createGain();
+      mute.gain.value = 0;
+      pcmRef.current = [];
+      peakRef.current = 0;
+      proc.onaudioprocess = (e) => {
+        const input = e.inputBuffer.getChannelData(0);
+        pcmRef.current.push(new Float32Array(input));
+        let sum = 0;
+        let peak = 0;
+        for (let i = 0; i < input.length; i++) {
+          const s = input[i];
+          sum += s * s;
+          const a = s < 0 ? -s : s;
+          if (a > peak) peak = a;
+        }
+        peakRef.current = Math.max(peakRef.current, peak);
+        setLevel(Math.min(1, Math.sqrt(sum / input.length) * 6));
       };
-      rec.onstop = () => void submit();
-      recRef.current = rec;
-      rec.start();
+      src.connect(proc);
+      proc.connect(mute);
+      mute.connect(ctx.destination);
+      ctxRef.current = ctx;
+      srcRef.current = src;
+      procRef.current = proc;
       setPhase("recording");
       setHint("正在录音，再点一次结束（最长 15 秒）");
-      timerRef.current = setTimeout(() => {
-        const r = recRef.current;
-        if (r && r.state !== "inactive") r.stop();
-      }, 15000);
+      timerRef.current = setTimeout(() => stop(), 15000);
     } catch {
-      releaseStream();
+      teardownAudio();
       setPhase("idle");
       setHint("麦克风权限未开启，请在地址栏允许后重试，或直接打字");
     }
@@ -199,6 +247,17 @@ export function VoiceInput({
 
   return (
     <div className="relative flex flex-col items-center gap-1">
+      {phase === "recording" && (
+        <div
+          className="absolute -top-2 h-1 w-11 overflow-hidden rounded-full bg-slate-200"
+          title="实时输入音量"
+        >
+          <div
+            className="h-full bg-worker transition-[width] duration-100"
+            style={{ width: `${Math.round(level * 100)}%` }}
+          />
+        </div>
+      )}
       <button
         type="button"
         onClick={() => void toggle()}
@@ -228,7 +287,7 @@ export function VoiceInput({
         {phase === "recording" ? "■" : phase === "uploading" ? "⏳" : "🎤"}
       </button>
       {hint && (
-        <span className="absolute mt-12 w-44 rounded-lg bg-slate-800 px-2 py-1 text-center text-[11px] leading-snug text-white">
+        <span className="absolute mt-12 w-52 rounded-lg bg-slate-800 px-2 py-1 text-center text-[11px] leading-snug text-white">
           {hint}
         </span>
       )}

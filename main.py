@@ -218,8 +218,8 @@ async def transcribe(file: UploadFile = File(...)):
     """语音录音转文字：转发到硅基流动 ASR，返回 {"text": "..."}。
 
     为什么不直接用浏览器 SpeechRecognition：Chrome / Edge 的实现依赖 Google 在线
-    识别服务，国内网络稳定返回 network 错误，功能等于不可用。改为前端
-    MediaRecorder 录音、这里转发到同厂商的 SenseVoiceSmall；识别文本回显到
+    识别服务，国内网络稳定返回 network 错误，功能等于不可用。改为前端 Web Audio
+    直接采 PCM 编 WAV、这里转发到同厂商的 SenseVoiceSmall；识别文本回显到
     输入框供用户核对后才进入既有 RAG / Agent 管线，和图片识别一样是
     「转文本 → 复用已评测管线」，不引入新的不可核验环节。
 
