@@ -28,6 +28,10 @@ LLM_VL_MODEL = os.getenv("LLM_VL_MODEL", "Qwen/Qwen3-VL-30B-A3B-Instruct")
 VL_MAX_PAGES = int(os.getenv("VL_MAX_PAGES", "3"))   # 单个 PDF 最多识别几页
 VL_MAX_SIDE = int(os.getenv("VL_MAX_SIDE", "1600"))  # 图片长边压缩上限（px）
 
+# 语音识别：浏览器内置 SpeechRecognition 在 Chrome/Edge 上依赖 Google 在线服务，
+# 国内网络必然返回 network 错误，因此改由服务端转发到同厂商的 ASR 模型。
+ASR_MODEL = os.getenv("ASR_MODEL", "FunAudioLLM/SenseVoiceSmall")
+
 # ---- Agent 专用模型 ----
 # 实测：DeepSeek-V3 在硅基流动上不总是走 tool_calls 协议，会把调用写成正文里的 JSON
 # （「假调用」，评审一眼能看穿）；V3.1 与 Qwen3-32B 稳定返回原生 tool_calls，

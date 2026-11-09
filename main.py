@@ -14,14 +14,21 @@
     POST /api/review_text  合同正文粘贴（JSON），SSE 流式审查
     POST /api/agent/stream Agent 工具循环（SSE：工具调用过程 + 逐字回答）
     POST /api/agent/run    Agent 非流式版本（脚本调用用）
+    POST /api/transcribe   语音录音转文字（服务端 ASR，返回 JSON）
 """
 import io
 import os
 from pathlib import Path
 
+import requests
+
 # 本地 .env 优先，云上用平台注入的环境变量
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
+
+# 必须放在 load_dotenv() 之后：config.py 在模块导入时就读取 os.getenv，
+# 提前导入会导致本地 .env 里的密钥读不到（线上由平台注入则不受影响）
+import config
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -200,6 +207,59 @@ async def review_image(file: UploadFile = File(...)):
         stream_vision_review(raw, file.filename or "upload.jpg"),
         media_type="text/event-stream",
     )
+
+
+# 语音输入上限：15 秒 16kHz 单声道 WAV 约 0.5MB，留足余量
+MAX_AUDIO = 10 * 1024 * 1024
+
+
+@app.post("/api/transcribe")
+async def transcribe(file: UploadFile = File(...)):
+    """语音录音转文字：转发到硅基流动 ASR，返回 {"text": "..."}。
+
+    为什么不直接用浏览器 SpeechRecognition：Chrome / Edge 的实现依赖 Google 在线
+    识别服务，国内网络稳定返回 network 错误，功能等于不可用。改为前端
+    MediaRecorder 录音、这里转发到同厂商的 SenseVoiceSmall；识别文本回显到
+    输入框供用户核对后才进入既有 RAG / Agent 管线，和图片识别一样是
+    「转文本 → 复用已评测管线」，不引入新的不可核验环节。
+
+    隐私：音频只转发、不落盘、不存储、不写日志。
+    """
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="录音为空")
+    if len(raw) > MAX_AUDIO:
+        raise HTTPException(status_code=413, detail="录音超过 10MB，请说短一点")
+
+    key = config.LLM_API_KEY or config.EMBED_API_KEY
+    if not key:
+        raise HTTPException(status_code=503, detail="语音识别未配置")
+
+    url = config.LLM_BASE_URL.rstrip("/") + "/audio/transcriptions"
+    try:
+        r = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {key}"},
+            files={
+                "file": (
+                    file.filename or "audio.wav",
+                    raw,
+                    file.content_type or "audio/wav",
+                )
+            },
+            data={"model": config.ASR_MODEL},
+            timeout=60,
+        )
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"语音服务连接失败：{type(e).__name__}")
+
+    if r.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"语音识别失败（{r.status_code}）")
+    try:
+        text = (r.json() or {}).get("text", "").strip()
+    except ValueError:
+        raise HTTPException(status_code=502, detail="语音识别返回格式异常")
+    return {"text": text}
 
 
 if __name__ == "__main__":

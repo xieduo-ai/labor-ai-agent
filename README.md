@@ -102,15 +102,19 @@ main.py            FastAPI 后端（Web 版唯一入口）
   ├─ /api/review, /api/review_image, /api/review_text   SSE 流式逐条审查（含多模态识别回显）
   ├─ /api/agent/stream, /api/agent/run                 规划 + 多轮 Function Calling 工具循环（SSE 展示计划与调用过程）
   ├─ /api/qa, /api/calc, /api/health                   问答 / 赔偿计算 / 探活
+  ├─ /api/transcribe                                    语音录音转文字（服务端 ASR，音频不落盘）
   └─ api/review_stream.py, api/agent.py                 流式编排层（不改动已评测的 src/review.py）
 frontend/          Next.js 前端（App Router 5 页面，fetch 流式解析 SSE，拍照上传 + 语音输入/朗读）
   ├─ components/   可复用组件（风险卡 memo、统计卡、执行计划、引用列表、语音、富文本）
   └─ error.tsx / global-error.tsx / loading.tsx        错误边界与加载骨架
 ```
 
-多模态覆盖文本、图像（视觉识别转写）、语音（浏览器语音输入 + 本地 TTS 朗读）。
-语音与图像一样只负责「转成文本」，之后复用同一条已评测的 RAG / 审查管线，
-不新增不可核验的生成环节；浏览器不支持时自动隐藏语音入口，不阻塞主流程。
+多模态覆盖文本、图像（视觉识别转写）、语音（录音 → 服务端 ASR 转文字 + 本地 TTS 朗读）。
+语音与图像一样只负责「转成文本」，识别结果回显到输入框供核对，确认后才复用同一条
+已评测的 RAG / 审查管线，不新增不可核验的生成环节；浏览器不支持录音时自动隐藏入口，
+识别失败降级为手动输入，不阻塞主流程。语音识别走 `/api/transcribe` 转发硅基流动
+`FunAudioLLM/SenseVoiceSmall`——浏览器内置 SpeechRecognition 依赖 Google 在线服务，
+国内网络稳定失败，故不用它。音频只转发、不落盘、不存储。
 
 模型分工：问答与审查用 `DeepSeek-V3`（长文本质量），Agent 用 `DeepSeek-V3.1`（实测 V3 在硅基流动
 不总返回原生 `tool_calls`，会把调用写成正文 JSON 的「假调用」），视觉识别用 `Qwen3-VL-30B-A3B`。
