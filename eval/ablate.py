@@ -22,12 +22,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import jieba  # noqa: E402
 import numpy as np  # noqa: E402
+
+# jieba 首次加载词典会打 4 行 INFO 日志，截图里占版面，静音掉
+jieba.setLogLevel(logging.ERROR)
 
 import config  # noqa: E402
 from src.llm import embed, rerank  # noqa: E402
@@ -150,16 +155,18 @@ def main() -> int:
             print(f"  … 已评完 {i + 1}/{len(rows)} 题", flush=True)
 
     n = len(rows)
-    line = "─" * 78
+    # 全角「─」占 2 列：39 个 ≈ 78 显示列，正好装进 80 列默认 PowerShell 窗口不折行。
+    # 列宽 32+8+10=50，最长结论约 26 列，整行 ≈76 列，不会挤到换行。
+    line = "─" * 39
     print()
     print(f"评测集 {path.name}（{n} 题）　指标 Recall@{TOP_K}　"
           f"向量 {config.EMBED_MODEL} / 重排 {config.RERANK_MODEL}")
     print(line)
-    print(pad("方案", 36) + pad("命中", 10) + pad("Recall@5", 12) + "结论")
+    print(pad("方案", 32) + pad("命中", 8) + pad("Recall@5", 10) + "结论")
     print(line)
     for name, _, _, _, note in MODES:
         h = hits[name]
-        print(pad(name, 36) + pad(f"{h}/{n}", 10) + pad(f"{h / n:.1%}", 12) + note)
+        print(pad(name, 32) + pad(f"{h}/{n}", 8) + pad(f"{h / n:.1%}", 10) + note)
     print(line)
 
     base = hits["① 纯向量"] / n
