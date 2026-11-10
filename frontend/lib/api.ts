@@ -32,6 +32,8 @@ export interface ReviewItem {
   suggestion: string;
   insufficient_basis: boolean;
   legal_basis: LegalBasis[];
+  /** 「如果签了会怎样」：量化后果，人话。无则「—」 */
+  consequence: string;
 }
 
 export interface ReviewSummary {

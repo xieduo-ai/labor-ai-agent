@@ -6,7 +6,7 @@ import { errMessage, streamAgent, type AgentStreamEvent, type CitationAudit } fr
 import { AgentPlan } from "@/components/AgentPlan";
 import { StructuredAnswer } from "@/components/StructuredAnswer";
 import { RelatedPanel, type RelatedLaw } from "@/components/RelatedPanel";
-import { COMMON_DISPUTES } from "@/data/caseRefs";
+import { COMMON_DISPUTES, JUDGMENT_CASES, type JudgmentCase } from "@/data/caseRefs";
 
 // 语音模块含浏览器 API 探测，按需要时才下载（代码分割，不进首屏 bundle）。
 const VoiceInput = dynamic(
@@ -36,6 +36,28 @@ const EXAMPLES = [
   "竞业限制的补偿一般给多少？",
   "仲裁时效从哪天开始算？",
 ];
+
+/** 争议类型关键词 -> 用于把用户问题闭集匹配到类案库（不靠模型，零幻觉） */
+const CASE_KEYWORDS: Record<string, string[]> = {
+  违法解除: ["违法解除", "辞退", "开除", "解除", "2N", "赔偿金", "炒鱿鱼", "被开"],
+  经济补偿: ["经济补偿", "补偿金", "裁员", "协商解除", "不续签", "终止"],
+  试用期: ["试用期"],
+  放弃社保: ["社保", "放弃社保", "补缴", "不交社保"],
+  加班费: ["加班", "加班费", "延时", "休息日"],
+  竞业限制: ["竞业", "竞业限制"],
+  二倍工资: ["二倍工资", "未签合同", "没签合同", "不签合同", "书面合同"],
+  工伤: ["工伤", "工伤认定", "伤残"],
+  女职工三期: ["孕期", "产期", "哺乳", "三期", "怀孕", "生育", "产假"],
+};
+
+/** 按问题关键词闭集匹配类案，最多返回 3 条；一条都不命中则不展示（右侧资料栏仍可按类浏览全部） */
+function matchCases(question: string): JudgmentCase[] {
+  const q = question.toLowerCase();
+  const hits = JUDGMENT_CASES.filter((c) =>
+    (CASE_KEYWORDS[c.category] ?? []).some((k) => q.includes(k.toLowerCase()))
+  );
+  return hits.slice(0, 3);
+}
 
 /** 把工具入参渲染成人话，让用户看得懂 Agent 拿什么去调了工具 */
 function argsText(tool: string, args?: Record<string, unknown>): string {
@@ -146,6 +168,11 @@ export default function AgentPage() {
 
   const completedCount = useMemo(() => steps.filter((s) => s.status === "done").length, [steps]);
   const speakText = useMemo(() => answer.replace(/\*\*/g, ""), [answer]);
+  // 回答产出后，闭集匹配类案库，给出 1~3 条「类案参考」（不靠模型，零幻觉）
+  const relatedCases = useMemo(
+    () => (answer && lastQuestion ? matchCases(lastQuestion) : []),
+    [answer, lastQuestion]
+  );
 
   /** 每次检索命中都累加进右侧资料栏（去重），只收真实工具返回值 */
   const collectLaws = useCallback((result?: Record<string, unknown>) => {
@@ -182,6 +209,10 @@ export default function AgentPage() {
 
     const ac = new AbortController();
     abortRef.current = ac;
+
+    // 规划阶段自动展开「执行过程」，让评委/用户实时看到 Agent 在做什么，
+    // 避免首字延迟期间页面像「卡死」（对应教师提出的技术风险点）。答完后再收起。
+    setProcessOpen(true);
 
     try {
       await streamAgent({ message: msg }, (ev: AgentStreamEvent) => {
@@ -270,6 +301,10 @@ export default function AgentPage() {
                   Agent 会自主决定查哪条法条、要不要算赔偿，并把每一步摊开给你核验。
                   每条结论都限定在检索到的法条内，摘录与原文逐字比对。
                 </p>
+                <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[11px] text-slate-500">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  聚焦劳动法领域；其他法律问题仅提供常识性说明，不构成法律意见
+                </div>
                 <div className="mt-5 text-[12px] font-medium text-slate-500">常见劳动争议</div>
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {COMMON_DISPUTES.slice(0, 6).map((d) => (
@@ -373,10 +408,71 @@ export default function AgentPage() {
                   onLawClick={() => setPanelOpen(true)}
                   verifiedArticles={laws.map((l) => l.article)}
                 />
+
+                {/* 类案参考：闭集匹配，随回答一起给出相似判例，对标「得理法搜」的同类案例区 */}
+                {!loading && relatedCases.length > 0 && (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="rounded-md bg-sky-100 px-1.5 py-0.5 text-[11px] font-medium text-sky-700">
+                        类案参考
+                      </span>
+                      <span className="text-[13px] font-semibold text-slate-800">
+                        和你情况相似的真实判例
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {relatedCases.map((c) => (
+                        <a
+                          key={c.id}
+                          href={c.sourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block rounded-xl border border-white bg-white p-3 transition-colors hover:border-sky-300"
+                        >
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="rounded bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                              {c.category}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              {c.level} · {c.caseNo}
+                            </span>
+                          </div>
+                          <div className="mt-1 line-clamp-1 text-[13px] font-medium text-slate-800">
+                            {c.title}
+                          </div>
+                          <div className="mt-1 text-[11.5px] leading-relaxed text-emerald-700">
+                            {c.result}
+                          </div>
+                          <div className="mt-0.5 text-[10.5px] leading-relaxed text-slate-500">
+                            相似点：{c.similarity}
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {loading && !answer && (
-                  <div className="flex items-center gap-2 text-[12px] text-slate-400">
-                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
-                    正在组织依据与结论…
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-center gap-2 text-[12px] font-medium text-slate-500">
+                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
+                      {plan ? "正在规划解决方案…" : "正在理解你的情况…"}
+                    </div>
+                    {plan && (
+                      <div className="mt-3 space-y-1.5">
+                        <div className="text-[12px] text-slate-600">目标：{plan.goal}</div>
+                        {plan.steps.map((s, i) => (
+                          <div key={i} className="flex items-center gap-2 text-[12px] text-slate-500">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
+                            {s}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-4 space-y-2">
+                      <div className="h-3 w-3/4 animate-pulse rounded bg-slate-100" />
+                      <div className="h-3 w-2/3 animate-pulse rounded bg-slate-100" />
+                      <div className="h-3 w-1/2 animate-pulse rounded bg-slate-100" />
+                    </div>
                   </div>
                 )}
                 {citationAudit && !loading && citationAudit.total > 0 && (

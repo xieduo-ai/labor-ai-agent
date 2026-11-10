@@ -91,17 +91,31 @@ def review_contract_tool(contract_text: str) -> dict:
 
 def calc_compensation_tool(
     monthly_wage: float,
-    work_years: float,
+    work_years: float = 0.0,
     scenario: str = "illegal",
     local_avg_wage: float | None = None,
+    advance_notice: bool = False,
+    unsigned_months: float = 11.0,
+    leave_days: float = 0.0,
+    hrs_normal: float = 0.0,
+    hrs_rest: float = 0.0,
+    hrs_legal: float = 0.0,
+    injury_grade: int = 10,
 ) -> dict:
-    """算经济补偿/赔偿金。规则见 src/compensation.py。"""
+    """算经济补偿/赔偿金/专项索赔。规则见 src/compensation.py。"""
     try:
         return _calc(
             monthly_wage=float(monthly_wage),
             work_years=float(work_years),
             scenario=scenario,
             local_avg_wage=float(local_avg_wage) if local_avg_wage else None,
+            advance_notice=advance_notice,
+            unsigned_months=float(unsigned_months),
+            leave_days=float(leave_days),
+            hrs_normal=float(hrs_normal),
+            hrs_rest=float(hrs_rest),
+            hrs_legal=float(hrs_legal),
+            injury_grade=int(injury_grade),
         )
     except (ValueError, TypeError) as e:
         return {"error": str(e), "scenarios": SCENARIOS}
@@ -200,25 +214,40 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "calc_compensation",
-            "description": "计算经济补偿金（N）、赔偿金（2N）或 N+1。"
+            "description": "计算经济补偿金（N）、赔偿金（2N）、N+1，以及专项索赔：未签合同二倍工资、"
+                           "未休年假折算、加班费、工伤一次性伤残补助金。"
                            "涉及具体金额时必须调用，不要口算。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "monthly_wage": {"type": "number", "description": "离职前 12 个月平均月薪（元）"},
-                    "work_years": {"type": "number", "description": "在本单位工作年限（年，可带小数如 3.5）"},
+                    "monthly_wage": {"type": "number", "description": "离职前 12 个月平均月薪（元）；也是未签合同/年假/工伤的本人工资基数"},
+                    "work_years": {"type": "number", "description": "在本单位工作年限（年，可带小数如 3.5），仅解除/终止类使用"},
                     "scenario": {
                         "type": "string",
                         "enum": list(SCENARIOS),
-                        "description": "illegal=违法解除(2N)；normal=协商/裁员(N)；"
-                                       "no_fault=未提前30天通知(N+1)；expire=合同到期不续签(N)",
+                        "description": "解除/终止类：illegal=违法解除(2N)；negotiate=协商(N)；"
+                                       "layoff=经济性裁员(N)；maternity=女职工三期违法解除(2N)；"
+                                       "incompetent/objective=不能胜任/客观变化(N，可加代通知金)；"
+                                       "probation_fail/serious_violation=合法解除无补偿。专项类："
+                                       "double_wage=未签合同二倍工资；annual_leave=未休年假；"
+                                       "overtime=加班费；work_injury=工伤伤残补助金",
                     },
                     "local_avg_wage": {
                         "type": "number",
                         "description": "当地上年度职工月平均工资，用于三倍封顶校验。用户没提就省略",
                     },
+                    "advance_notice": {
+                        "type": "boolean",
+                        "description": "单位是否未提前30日书面通知（不能胜任/客观变化类适用，触发+1代通知金）",
+                    },
+                    "unsigned_months": {"type": "number", "description": "未签书面合同月数（double_wage 用，封顶 11）"},
+                    "leave_days": {"type": "number", "description": "未休年假天数（annual_leave 用）"},
+                    "hrs_normal": {"type": "number", "description": "延时加班小时数（overtime 用）"},
+                    "hrs_rest": {"type": "number", "description": "休息日加班小时数（overtime 用）"},
+                    "hrs_legal": {"type": "number", "description": "法定节假日加班小时数（overtime 用）"},
+                    "injury_grade": {"type": "integer", "description": "工伤伤残等级 1~10（work_injury 用）"},
                 },
-                "required": ["monthly_wage", "work_years", "scenario"],
+                "required": ["monthly_wage", "scenario"],
             },
         },
     },

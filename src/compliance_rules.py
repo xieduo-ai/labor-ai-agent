@@ -270,6 +270,7 @@ def enforce_probation_rules(issues: list, clause: str, contract_text: str, hits:
                         "issue": f"试用期工资 {wv['probation_wage']} 元低于约定工资的 80%（{wv['floor']:.0f} 元）",
                         "legal_basis": basis, "insufficient_basis": False,
                         "suggestion": f"将试用期工资提高至不低于 {wv['floor']:.0f} 元，且不低于当地最低工资标准",
+                        "consequence": "试用期工资低于法定下限，员工可主张补足差额；若因此解除劳动合同或影响社保缴费基数，企业还可能承担补足及赔偿责任。",
                         "rule_verified": True,
                     })
                     audit.update(applied=True, action="补上模型漏报的试用期工资过低")
@@ -340,6 +341,7 @@ def enforce_probation_rules(issues: list, clause: str, contract_text: str, hits:
         "legal_basis": basis,
         "insufficient_basis": False,
         "suggestion": f"将试用期调整为不超过 {ev['limit_months']} 个月，或重新约定合同期限",
+        "consequence": f"违法约定试用期，超期期间的试用期按转正工资计薪；员工可主张赔偿金，劳动行政部门可责令改正并处以罚款。",
         "rule_verified": True,
     }
     audit.update(applied=True, action="补上模型漏报的试用期超期", added=1)

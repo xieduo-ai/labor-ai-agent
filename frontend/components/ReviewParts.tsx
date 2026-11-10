@@ -69,6 +69,13 @@ export const RiskCard = memo(function RiskCard({ item }: { item: ReviewItem }) {
           {item.suggestion}
         </div>
       )}
+      {/* 「如果签了会怎样」：把法律风险翻译成生活语言，是老师重点要求的一栏 */}
+      {item.consequence && item.consequence !== "—" && (
+        <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[13px] leading-relaxed text-rose-800">
+          <span className="font-medium">如果签了会怎样：</span>
+          {item.consequence}
+        </div>
+      )}
       {item.legal_basis.length > 0 && (
         <div className="mt-2 border-t border-current/10 pt-2 text-xs">
           {item.legal_basis.map((b, i) => (

@@ -77,9 +77,17 @@ class ReviewTextRequest(BaseModel):
 
 class CalcRequest(BaseModel):
     monthly_wage: float
-    work_years: float
+    work_years: float = 0.0
     scenario: str = "illegal"
     local_avg_wage: float | None = None
+    # 专项索赔类可选参数
+    advance_notice: bool = False
+    unsigned_months: float = 11.0
+    leave_days: float = 0.0
+    hrs_normal: float = 0.0
+    hrs_rest: float = 0.0
+    hrs_legal: float = 0.0
+    injury_grade: int = 10
 
 
 # ---------- 工具 ----------
@@ -148,6 +156,13 @@ def calc(req: CalcRequest):
             work_years=req.work_years,
             scenario=req.scenario,
             local_avg_wage=req.local_avg_wage,
+            advance_notice=req.advance_notice,
+            unsigned_months=req.unsigned_months,
+            leave_days=req.leave_days,
+            hrs_normal=req.hrs_normal,
+            hrs_rest=req.hrs_rest,
+            hrs_legal=req.hrs_legal,
+            injury_grade=req.injury_grade,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -57,7 +57,8 @@ def stream_review(text: str) -> Iterator[str]:
             else:
                 new = [{**base, "risk_level": "无", "risk_type": "其他",
                         "issue": "未发现明显风险", "legal_basis": [],
-                        "insufficient_basis": False, "suggestion": ""}]
+                        "insufficient_basis": False, "suggestion": "",
+                        "consequence": "—"}]
             all_items.extend(new)
             yield _sse("clause", {"index": i, "total": len(clauses), "items": new})
         except Exception as e:  # 单条失败不拖垮整份审查

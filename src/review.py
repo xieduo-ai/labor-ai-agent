@@ -93,6 +93,8 @@ def _parse_issues(raw: str, hits: list) -> list:
             # 高/中风险却给不出依据：如实标出来，不许"看起来有依据"
             "insufficient_basis": level in ("高", "中", "未知") and not basis,
             "suggestion": str(it.get("suggestion", "")).strip(),
+            # 后果栏：把"签了会怎样"翻译成人话，前端单独成块展示
+            "consequence": str(it.get("consequence", "")).strip() or "—",
         })
     return out
 
@@ -188,7 +190,8 @@ def review_contract(text: str, max_clauses: int = 40) -> dict:
         else:
             items.append({**base, "risk_level": "无", "risk_type": "其他",
                           "issue": "未发现明显风险", "legal_basis": [],
-                          "insufficient_basis": False, "suggestion": ""})
+                          "insufficient_basis": False, "suggestion": "",
+                          "consequence": "—"})
 
     order = {"高": 0, "中": 1, "低": 2, "无": 3, "未知": 4}
     items.sort(key=lambda r: order.get(r["risk_level"], 9))
