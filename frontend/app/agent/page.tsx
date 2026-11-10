@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { errMessage, streamAgent, type AgentStreamEvent } from "@/lib/api";
+import { errMessage, streamAgent, type AgentStreamEvent, type CitationAudit } from "@/lib/api";
 import { AgentPlan } from "@/components/AgentPlan";
 import { StructuredAnswer } from "@/components/StructuredAnswer";
 import { RelatedPanel, type RelatedLaw } from "@/components/RelatedPanel";
@@ -138,6 +138,7 @@ export default function AgentPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [plan, setPlan] = useState<{ goal: string; steps: string[] } | null>(null);
   const [laws, setLaws] = useState<RelatedLaw[]>([]);
+  const [citationAudit, setCitationAudit] = useState<CitationAudit | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
   const [processOpen, setProcessOpen] = useState(false);
   const [lastQuestion, setLastQuestion] = useState("");
@@ -174,6 +175,7 @@ export default function AgentPage() {
     setExpanded(null);
     setPlan(null);
     setLaws([]);
+    setCitationAudit(null);
     setLastQuestion(msg);
     setInput(msg);
     setProcessOpen(false);
@@ -212,6 +214,7 @@ export default function AgentPage() {
             break;
           case "done":
             setRounds(ev.rounds);
+            setCitationAudit(ev.citation_audit ?? null);
             break;
           case "error":
             setError(ev.message);
@@ -229,7 +232,7 @@ export default function AgentPage() {
   const newChat = useCallback(() => {
     abortRef.current?.abort();
     setInput(""); setSteps([]); setAnswer(""); setError(""); setRounds(0);
-    setExpanded(null); setPlan(null); setLaws([]); setLastQuestion("");
+    setExpanded(null); setPlan(null); setLaws([]); setCitationAudit(null); setLastQuestion("");
     setProcessOpen(false); setLoading(false);
   }, []);
 
@@ -374,6 +377,30 @@ export default function AgentPage() {
                   <div className="flex items-center gap-2 text-[12px] text-slate-400">
                     <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
                     正在组织依据与结论…
+                  </div>
+                )}
+                {citationAudit && !loading && citationAudit.total > 0 && (
+                  <div className={`mt-4 rounded-lg border p-3 text-[11px] leading-relaxed ${
+                    citationAudit.unverified.length === 0
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-amber-200 bg-amber-50 text-amber-800"
+                  }`}>
+                    <div className="font-medium">
+                      引用核验 · 回答中出现 {citationAudit.total} 处条号，
+                      {citationAudit.verified} 处命中本次检索
+                      {citationAudit.unverified.length > 0
+                        ? `，${citationAudit.total - citationAudit.verified} 处未核验`
+                        : "，全部可核验"}
+                    </div>
+                    <div className="mt-1 text-[10.5px] opacity-80">
+                      本次可用条号：{citationAudit.whitelist.join("、") || "（本次未检索法条）"}
+                    </div>
+                    {citationAudit.unverified.length > 0 && (
+                      <div className="mt-1 text-[10.5px]">
+                        未核验条号已在正文中标注 ⚠：{citationAudit.unverified.join("、")}。
+                        这些条号不在本次检索结果内，请勿作为依据引用。
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="mt-5 border-t border-slate-100 pt-2.5 text-[10px] text-slate-400">

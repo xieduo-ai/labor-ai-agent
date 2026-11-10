@@ -81,8 +81,16 @@ export type AgentStreamEvent =
       result?: Record<string, unknown>;
     }
   | { event: "token"; text: string }
-  | { event: "done"; tools_used: string[]; rounds: number }
+  | { event: "done"; tools_used: string[]; rounds: number; citation_audit?: CitationAudit }
   | { event: "error"; message: string };
+
+/** 后端把回答里每个条号与本次 search_law 命中做比对的结果 */
+export interface CitationAudit {
+  total: number;
+  verified: number;
+  unverified: string[];
+  whitelist: string[];
+}
 
 // ---------- 请求 ----------
 
