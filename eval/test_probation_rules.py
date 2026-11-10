@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.compliance_rules import (  # noqa: E402
     enforce_probation_rules,
     evaluate_probation,
+    evaluate_probation_wage,
     probation_limit_months,
 )
 
@@ -124,6 +125,41 @@ def test_rule_layer() -> None:
     check(len(out5) == 1 and "社保" in out5[0]["risk_type"],
           "无关条款上重复的试用期结论被清掉，社保结论保留", str(out5))
     check("删除无关条款" in audit5["action"], "审计记录标记背景污染清理", str(audit5))
+
+    print("\n[A2] 第二十条：试用期工资 80% 下限，同样由代码算")
+    wv = evaluate_probation_wage(TWO_YEAR)
+    check(wv["below"] is True and wv["floor"] == 6400, "2000 元 < 8000×80%=6400 元", str(wv))
+    check("低于下限" in wv["verdict"], "结论写明法定下限", wv["verdict"])
+    wv3 = evaluate_probation_wage(THREE_YEAR)
+    check(wv3["below"] is None, "没写工资时不猜，返回 None", str(wv3))
+
+    # 模型把明确违法的工资问题判成中风险 -> 必须固定为高
+    mid_wage = [{
+        "risk_level": "中", "risk_type": "薪酬",
+        "issue": "试用期工资未明确是否达到法定标准", "suggestion": "请明确",
+        "legal_basis": [], "insufficient_basis": False,
+    }]
+    out6, audit6 = enforce_probation_rules(
+        mid_wage, "第一条 合同期限为两年，其中试用期六个月，试用期工资为每月2000元，转正后每月8000元",
+        TWO_YEAR, HITS
+    )
+    check(any(it["risk_level"] == "高" for it in out6), "明确低于下限的工资问题固定判高", str(out6))
+    check(audit6["applied"], "规则确实介入", str(audit6))
+
+    # 工资合法时不得误报
+    legal_wage = ("第一条 合同期限为三年，试用期六个月，"
+                  "试用期工资为每月7000元，转正后每月8000元。")
+    out7, audit7 = enforce_probation_rules(
+        [{"risk_level": "高", "risk_type": "薪酬", "issue": "试用期工资低于转正工资的80%",
+          "suggestion": "补足", "legal_basis": [], "insufficient_basis": False}],
+        legal_wage, legal_wage, HITS
+    )
+    check(not any(_is_wage_issue_local(it) for it in out7), "工资合法时误报被删除", str(out7))
+
+
+def _is_wage_issue_local(it: dict) -> bool:
+    s = f"{it.get('issue', '')} {it.get('suggestion', '')}"
+    return "试用期" in s and any(k in s for k in ("工资", "薪资", "报酬", "80%", "低于"))
 
 
 def test_e2e(repeats: int) -> None:

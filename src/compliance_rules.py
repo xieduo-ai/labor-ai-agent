@@ -41,6 +41,11 @@ _DATE_RE = re.compile(
 _PROB_RE = re.compile(r"试用期[^。；;，,]{0,8}?" + _NUM + r"\s*个?月")
 _INDEFINITE_RE = re.compile(r"无固定期限")
 _TASK_BASED_RE = re.compile(r"以完成一定工作任务为期限|非全日制")
+_WAGE_RE = re.compile(r"试用期工资(?:为|是|约|:|：)?\s*(?:每月|月)?\s*([0-9]+)\s*元?")
+# 「转正后每月8000元」常省略「工资」二字，所以工资/月薪/为 都是可选的
+_REGULAR_WAGE_RE = re.compile(
+    r"转正后?(?:工资|月薪)?(?:为|是|约|:|：)?\s*(?:每月|月)?\s*([0-9]+)\s*元?"
+)
 
 # 「试用期期限类」误报的识别：含期限语义、但不含工资语义
 _LIMIT_KEYS = ("超过", "上限", "超期", "过长", "期限", "不得超过", "不得约定", "约定试用期")
@@ -173,6 +178,38 @@ def _is_probation_related(it: dict) -> bool:
     return "试用期" in s
 
 
+def evaluate_probation_wage(text: str) -> dict:
+    """《劳动合同法》第二十条：试用期工资不得低于约定工资的 80%。
+
+    与第十九条同理，这是能算的：合同写了 2000 / 8000，代码算 6400，
+    不需要模型心算，也不该让结论在「高」和「中」之间漂移。
+    """
+    t = (text or "").replace(" ", "")
+    pm = _WAGE_RE.search(t)
+    rm = _REGULAR_WAGE_RE.search(t)
+    prob = int(pm.group(1)) if pm else None
+    regular = int(rm.group(1)) if rm else None
+    if prob is None or regular is None or regular <= 0:
+        return {"probation_wage": prob, "regular_wage": regular,
+                "floor": None, "below": None, "verdict": "工资数据不足，按模型判断"}
+    floor = regular * 0.8
+    below = prob < floor
+    return {
+        "probation_wage": prob, "regular_wage": regular, "floor": floor,
+        "below": below,
+        "verdict": (
+            f"试用期工资 {prob} 元，约定工资 {regular} 元，法定下限 {floor:.0f} 元 —— "
+            + ("低于下限，违反第二十条" if below else "未低于下限，合法")
+        ),
+    }
+
+
+def _is_wage_issue(it: dict) -> bool:
+    """issue 是否在说试用期工资问题（区别于期限超期）。"""
+    s = f"{it.get('issue', '')} {it.get('suggestion', '')}"
+    return "试用期" in s and any(k in s for k in _WAGE_KEYS)
+
+
 def _is_limit_issue(it: dict) -> bool:
     """判断一个 issue 是否在说「试用期期限超上限」，而非「试用期工资过低」。"""
     s = f"{it.get('issue', '')} {it.get('suggestion', '')}"
@@ -183,10 +220,10 @@ def _is_limit_issue(it: dict) -> bool:
     return any(k in s for k in _LIMIT_KEYS)
 
 
-def _basis_for_limit(hits: list) -> list:
-    """补漏报时，从本次检索候选中找第十九条构造闭集引用（quote 逐字摘自原文）。"""
+def _basis_for_article(hits: list, article_no: str) -> list:
+    """补漏报时，从本次检索候选中找指定条文构造闭集引用（quote 逐字摘自原文）。"""
     for h in hits:
-        if "劳动合同法" in h.get("law_name", "") and h.get("article_no") == "第十九条":
+        if "劳动合同法" in h.get("law_name", "") and h.get("article_no") == article_no:
             return [{
                 "quote": h["text"][:80],
                 "exists": True,
@@ -197,6 +234,10 @@ def _basis_for_limit(hits: list) -> list:
     return []
 
 
+def _basis_for_limit(hits: list) -> list:
+    return _basis_for_article(hits, "第十九条")
+
+
 def enforce_probation_rules(issues: list, clause: str, contract_text: str, hits: list) -> tuple[list, dict]:
     """强制复核：返回 (修正后的 issues, 审计信息)。
 
@@ -205,6 +246,39 @@ def enforce_probation_rules(issues: list, clause: str, contract_text: str, hits:
     """
     ev = evaluate_probation(contract_text or clause)
     audit = {"rule": "劳动合同法第十九条", "verdict": ev["verdict"], "applied": False}
+
+    # 第二十条（试用期工资 80% 下限）同样能算，先把等级和文案钉死。
+    # 只在本条款确实写了试用期工资时才干预，避免碰到社保/发薪条款。
+    wv = evaluate_probation_wage(contract_text or clause)
+    if "试用期" in clause and wv["below"] is not None:
+        wage_issues = [it for it in issues if _is_wage_issue(it)]
+        if wv["below"]:
+            for it in wage_issues:
+                if it.get("risk_level") != "高":
+                    it["risk_level"] = "高"
+                    it["rule_verified"] = True
+                    audit["applied"] = True
+            if wage_issues:
+                audit["action"] = (
+                    f"确认试用期工资低于下限（{wv['probation_wage']} < {wv['floor']:.0f}），固定为高风险"
+                )
+            else:
+                basis = _basis_for_article(hits, "第二十条")
+                if basis:
+                    issues.append({
+                        "risk_level": "高", "risk_type": "薪酬",
+                        "issue": f"试用期工资 {wv['probation_wage']} 元低于约定工资的 80%（{wv['floor']:.0f} 元）",
+                        "legal_basis": basis, "insufficient_basis": False,
+                        "suggestion": f"将试用期工资提高至不低于 {wv['floor']:.0f} 元，且不低于当地最低工资标准",
+                        "rule_verified": True,
+                    })
+                    audit.update(applied=True, action="补上模型漏报的试用期工资过低")
+        else:
+            kept = [it for it in issues if not _is_wage_issue(it)]
+            if len(kept) != len(issues):
+                audit.update(applied=True, action="删除误报的试用期工资过低结论",
+                             removed=len(issues) - len(kept))
+                issues = kept
 
     # 硬校验：本条款根本没提试用期，就不该出现「试用期期限/工资」类结论。
     # 实测副作用：把第一条原文当背景喂进去后，模型会在社保条款、发薪条款上
@@ -236,7 +310,15 @@ def enforce_probation_rules(issues: list, clause: str, contract_text: str, hits:
         return cleaned, audit
 
     if limit_issues:
-        audit["action"] = "确认模型报出的试用期超期结论"
+        # 违反第十九条强制性规定的结论固定判「高」。
+        # 线上实测模型偶尔把「试用期工资未达法定标准」判成中风险，
+        # 会让汇总在 2 高 1 中 / 3 高之间漂移，评审材料的数字就对不上。
+        for it in limit_issues:
+            if it.get("risk_level") != "高":
+                it["risk_level"] = "高"
+                it["rule_verified"] = True
+                audit["applied"] = True
+        audit["action"] = "确认并固定试用期超期结论为高风险"
         return issues, audit
 
     # 补漏报只针对本条款确实写了试用期/合同期限的情况。
