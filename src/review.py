@@ -14,6 +14,7 @@ import re
 import sys
 
 import config
+from src.compliance_rules import enforce_probation_rules
 from src.llm import chat
 from src.prompts import REVIEW_SYSTEM
 from src.retrieve import search
@@ -120,21 +121,50 @@ def _review_query(clause: str) -> str:
     return clause
 
 
-def review_clause(clause: str, contract_ctx: str = "", top_k: int = 6) -> dict:
+def review_clause(clause: str, contract_ctx: str = "", top_k: int = 6,
+                  contract_text: str = "") -> dict:
     hits = search(_review_query(clause), top_k=top_k)
     ctx = "\n\n".join(
         f"[{i}] 《{h['law_name']}》{h['article_no']}\n{h['text']}"
         for i, h in enumerate(hits, 1)
     )
-    bg = f"合同背景（仅供判断参考，如试用期上限取决于合同期限；它不是待审查条款）：\n{contract_ctx}\n\n" if contract_ctx else ""
+    # 背景只给「期限事实」，不要整条复述第一条原文。
+    # 实测：把含试用期/工资约定的第一条原文整段塞进背景，模型会把这些坑
+    # 在后续每一条（社保、发薪）上重复报一遍，汇总从 3 高风险膨胀到 7 条，
+    # 摘录逐字率也被拖到 42.9%。只保留判定所必需的数字，副作用消失。
+    if contract_ctx:
+        from src.compliance_rules import evaluate_probation
+        ev = evaluate_probation(contract_ctx)
+        facts = (
+            f"合同期限：{ev['verdict'].split('，')[0]}；"
+            f"约定试用期：{ev['probation_months']} 个月；"
+            f"法定上限：{ev['limit_months']} 个月。"
+            if ev["limit_months"] is not None and ev["probation_months"] is not None
+            else "合同期限信息不足。"
+        )
+        bg = f"合同背景（仅用于计算试用期上限等依赖期限的事项，**不是待审查条款**）：\n{facts}\n\n"
+    else:
+        bg = ""
     messages = [
         {"role": "system", "content": REVIEW_SYSTEM},
         {"role": "user", "content": f"{bg}候选条文：\n\n{ctx}\n\n待审查条款：\n{clause}"},
     ]
-    raw = chat(messages, json_mode=True)
+    # 审查是判定任务，不是创作任务：温度必须归零，避免同一输入结果漂移。
+    raw = chat(messages, json_mode=True, temperature=0)
+    issues = _parse_issues(raw, hits)
+
+    # 确定性兜底：试用期上限这类有明确数字边界的结论，一律以代码计算为准。
+    # 模型误报「超期」就删掉，模型漏报就补一条带闭集引用的高风险。
+    issues, audit = enforce_probation_rules(
+        issues, clause, contract_text or contract_ctx, hits
+    )
+    if audit["applied"]:
+        print(f"[rule] {audit['verdict']} -> {audit['action']}", file=sys.stderr)
+
     return {
-        "issues": _parse_issues(raw, hits),
+        "issues": issues,
         "sources": [{"law_name": h["law_name"], "article_no": h["article_no"]} for h in hits],
+        "rule_audit": audit,
     }
 
 
@@ -150,7 +180,7 @@ def review_contract(text: str, max_clauses: int = 40) -> dict:
     items = []
     for i, clause in enumerate(clauses, 1):
         print(f"[{i}/{len(clauses)}] 审查中 ...", file=sys.stderr)
-        res = review_clause(clause, contract_ctx=contract_ctx)
+        res = review_clause(clause, contract_ctx=contract_ctx, contract_text=text)
         base = {"clause": clause, "clause_label": _clause_label(clause, i), "sources": res["sources"]}
         if res["issues"]:
             for it in res["issues"]:

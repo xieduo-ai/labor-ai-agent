@@ -46,7 +46,7 @@ def stream_review(text: str) -> Iterator[str]:
     failed = 0
     for i, clause in enumerate(clauses, 1):
         try:
-            res = review_clause(clause, contract_ctx=contract_ctx)
+            res = review_clause(clause, contract_ctx=contract_ctx, contract_text=text)
             base = {
                 "clause": clause,
                 "clause_label": _clause_label(clause, i),
