@@ -118,7 +118,7 @@ function DisputeCard({
   );
 }
 
-/** 紧凑结果卡：一屏能铺多条；点开才展开事实 / 结果 / 相似点 / 出处 */
+/** 全量浏览用的紧凑案例卡（仅未提问时展示） */
 function CaseCard({ item }: { item: JudgmentCase }) {
   const [open, setOpen] = useState(false);
   const kind = KIND_META[item.sourceKind];
@@ -202,15 +202,46 @@ function CaseCard({ item }: { item: JudgmentCase }) {
   );
 }
 
-/** 空态：宁可如实说没有，也不编案例 */
-function CaseEmpty() {
+/** 本次问题的相关类案卡：对标「类案参考 · 和你情况相似的真实判例」 */
+function RelatedCaseCard({ item }: { item: JudgmentCase }) {
+  const kind = KIND_META[item.sourceKind];
   return (
-    <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
-      <div className="text-[13px] font-medium text-slate-700">尚未接入裁判案例</div>
-      <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
-        类案须附真实案号、审理法院与官方原文链接，供评委点开核验。
-        在取得可核验来源之前，本栏保持为空，不使用模型生成的示例案件。
-      </p>
+    <a
+      href={item.sourceUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block rounded-xl border border-white bg-white p-3 transition-colors hover:border-sky-300"
+    >
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="rounded bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+          {item.category}
+        </span>
+        <span className="text-[10px] text-slate-400">
+          {item.level} · {item.caseNo}
+        </span>
+      </div>
+      <div className="mt-1.5 text-[12.5px] font-medium leading-snug text-slate-800">
+        {item.title}
+      </div>
+      <div className="mt-1.5 text-[11px] leading-relaxed text-emerald-700">
+        {item.result}
+      </div>
+      <div className="mt-1 text-[10.5px] leading-relaxed text-slate-500">
+        相似点：{item.similarity}
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+        <span className="truncate">{item.court}</span>
+        <span className="shrink-0 text-brand">{kind.link} ↗</span>
+      </div>
+    </a>
+  );
+}
+
+function EmptyState({ title, children }: { title: string; children: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-center">
+      <div className="text-[13px] font-medium text-slate-700">{title}</div>
+      <p className="mt-2 text-[11px] leading-relaxed text-slate-500">{children}</p>
     </div>
   );
 }
@@ -219,23 +250,60 @@ export function RelatedPanel({
   laws,
   onAsk,
   onClose,
+  hasAsked,
+  inDomain,
+  topic,
+  question,
+  relatedCases,
 }: {
   laws: RelatedLaw[];
   onAsk: (q: string) => void;
   onClose: () => void;
+  /** 是否已经提问过：决定页签与「常见争议」是否出现 */
+  hasAsked: boolean;
+  /** 领域前置判定结果；false 时法规与类案都必须是 0 */
+  inDomain: boolean;
+  topic: string;
+  question: string;
+  /** 本次问题闭集匹配到的相关类案（领域外为空） */
+  relatedCases: JudgmentCase[];
 }) {
-  // 未提问时默认展示「类案」：32 条真实案例 + 带数量的分组直接铺在首屏，
-  // 不必让用户先点一下 Tab 才看到资料（借鉴得理法搜的结果卡信息架构）。
-  const defaultTab: Tab = JUDGMENT_CASES.length > 0 ? "case" : "dispute";
-  const [tab, setTab] = useState<Tab>(defaultTab);
+  const [tab, setTab] = useState<Tab>("case");
   const [category, setCategory] = useState<string>("all");
 
-  // 一旦本次提问检索到真实法条，自动切到「法规」Tab —— 这是老师最想看的依据层，
-  // 不该让用户手动点一下才出现；新建对话后回到类案。
+  // 提问后只保留「法规 / 类案」；未提问时才显示「常见争议」。
+  // 领域外：法规 0、类案 0，同样不显示常见争议。
+  const tabs: { key: Tab; label: string; count: number }[] = hasAsked
+    ? [
+        { key: "law", label: "法规", count: inDomain ? laws.length : 0 },
+        { key: "case", label: "类案", count: inDomain ? relatedCases.length : 0 },
+      ]
+    : [
+        { key: "law", label: "法规", count: 0 },
+        { key: "dispute", label: "常见争议", count: COMMON_DISPUTES.length },
+        { key: "case", label: "类案", count: JUDGMENT_CASES.length },
+      ];
+
+  // 每次新问题 / 领域状态变化时给一个合理默认页签。
+  // 用布尔量 laws.length > 0 参与 key，避免流式过程中逐条命中法条时反复把用户
+  // 手动切走的页签拉回「法规」。
+  const autoKey = `${question}|${hasAsked}|${inDomain}|${laws.length > 0}`;
   useEffect(() => {
-    if (laws.length > 0) setTab("law");
-    else setTab(defaultTab);
-  }, [laws.length, defaultTab]);
+    if (!hasAsked) {
+      setTab("case");       // 首屏铺全量类案，常见争议仍可切换
+    } else if (!inDomain) {
+      setTab("law");        // 法规 0 的空态，明确说明领域外无资料
+    } else {
+      setTab(laws.length > 0 ? "law" : "case");
+    }
+    setCategory("all");
+  }, [autoKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 页签状态变化时若当前 tab 已不存在（例如从提问态回到首屏），兜底校正
+  const tabKeys = tabs.map((t) => t.key).join(",");
+  useEffect(() => {
+    if (!tabKeys.split(",").includes(tab)) setTab(tabKeys.split(",")[0] as Tab);
+  }, [tabKeys, tab]);
 
   const categoryCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -250,12 +318,6 @@ export function RelatedPanel({
         : JUDGMENT_CASES.filter((c) => c.category === category),
     [category],
   );
-
-  const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: "law", label: "法规", count: laws.length },
-    { key: "dispute", label: "常见争议", count: COMMON_DISPUTES.length },
-    { key: "case", label: "类案", count: JUDGMENT_CASES.length },
-  ];
 
   return (
     <aside className="flex h-full w-full flex-col border-l border-slate-200 bg-slate-50/70">
@@ -289,7 +351,33 @@ export function RelatedPanel({
         ))}
       </div>
 
-      {tab === "case" && JUDGMENT_CASES.length > 0 && (
+      {/* 领域外：明确告知本栏不含任何资料，避免用户以为漏加载 */}
+      {hasAsked && !inDomain && (
+        <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-2 text-[10.5px] leading-relaxed text-amber-800">
+          本问题不属于劳动关系领域{topic ? `（${topic}）` : ""}，
+          本次不检索法条、不生成类案，因此相关资料为 0。
+        </div>
+      )}
+
+      {/* 相关类案标题：仅提问后且领域内显示 */}
+      {hasAsked && inDomain && tab === "case" && relatedCases.length > 0 && (
+        <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            <span className="rounded-md bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
+              类案参考
+            </span>
+            <span className="text-[11.5px] font-semibold text-slate-800">
+              和你情况相似的真实判例
+            </span>
+          </div>
+          <div className="mt-1 text-[10px] leading-relaxed text-slate-500">
+            按本次问题闭集匹配，不参与模型生成；点击卡片可打开原始出处核验。
+          </div>
+        </div>
+      )}
+
+      {/* 分类筛选只在「未提问 + 全量类案」时出现 */}
+      {!hasAsked && tab === "case" && JUDGMENT_CASES.length > 0 && (
         <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2">
           <div className="mb-1.5 text-[10px] leading-relaxed text-slate-500">
             {JUDGMENT_CASES.length} 条真实案例 · 闭集静态展示，不参与检索与模型生成。
@@ -324,18 +412,23 @@ export function RelatedPanel({
       )}
 
       <div className="flex-1 space-y-2.5 overflow-y-auto px-3 py-3">
-        {tab === "law" &&
-          (laws.length ? (
+        {tab === "law" && (
+          !inDomain && hasAsked ? (
+            <EmptyState title="法规 0">
+              本次问题不属于劳动关系领域，未检索任何法条。本栏不会列出与问题无关的劳动法条文。
+            </EmptyState>
+          ) : laws.length ? (
             laws.map((l, i) => <LawCard key={`${l.law}-${l.article}-${i}`} item={l} index={i + 1} />)
           ) : (
             <div className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-center text-[11px] leading-relaxed text-slate-500">
-              本次提问尚未检索法条。
-              <br />
-              提问后，Agent 实际命中的条文会逐条列在这里，供你点开核对原文。
+              {hasAsked
+                ? "本次提问尚未检索法条。提问后，Agent 实际命中的条文会逐条列在这里，供你点开核对原文。"
+                : "提问后，Agent 实际命中的条文会逐条列在这里，供你点开核对原文。"}
             </div>
-          ))}
+          )
+        )}
 
-        {tab === "dispute" && (
+        {tab === "dispute" && !hasAsked && (
           <>
             <div className="rounded-lg bg-blue-50 px-2.5 py-2 text-[10px] leading-relaxed text-blue-800">
               以下为本项目自建 40 题口语化评测集中的高频争议，用于演示常见问法，
@@ -347,16 +440,30 @@ export function RelatedPanel({
           </>
         )}
 
-        {tab === "case" &&
-          (JUDGMENT_CASES.length ? (
-            visibleCases.map((c) => <CaseCard key={c.id} item={c} />)
+        {tab === "case" && (
+          hasAsked ? (
+            !inDomain ? (
+              <EmptyState title="类案 0">
+                本次问题不属于劳动关系领域，没有相似类案。为避免误导，本栏不展示与问题无关的劳动法判例。
+              </EmptyState>
+            ) : relatedCases.length ? (
+              relatedCases.map((c) => <RelatedCaseCard key={c.id} item={c} />)
+            ) : (
+              <EmptyState title="本次未匹配到相似类案">
+                类案按问题关键词在 32 条真实案例闭集内匹配，不做模糊生成。
+                没有命中时如实留空，不用模型编造案例。
+              </EmptyState>
+            )
           ) : (
-            <CaseEmpty />
-          ))}
+            visibleCases.map((c) => <CaseCard key={c.id} item={c} />)
+          )
+        )}
       </div>
 
       <div className="shrink-0 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-400">
-        资料仅作辅助参考，不构成法律意见
+        {hasAsked
+          ? "资料随本次问题更新，仅作辅助参考，不构成法律意见"
+          : "资料仅作辅助参考，不构成法律意见"}
       </div>
     </aside>
   );

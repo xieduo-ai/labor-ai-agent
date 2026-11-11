@@ -28,6 +28,13 @@ interface ToolStep {
   status: "running" | "done";
 }
 
+/** 后端领域前置判定的结果（进入工具循环之前就推过来） */
+interface DomainState {
+  in_domain: boolean;
+  topic: string;
+  notice: string;
+}
+
 const EXAMPLES = [
   "我在公司干了3年，月薪8000，昨天突然被辞退，能拿多少钱？",
   "公司让我周末加班不给加班费，合法吗？",
@@ -164,14 +171,20 @@ export default function AgentPage() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [processOpen, setProcessOpen] = useState(false);
   const [lastQuestion, setLastQuestion] = useState("");
+  const [domain, setDomain] = useState<DomainState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const completedCount = useMemo(() => steps.filter((s) => s.status === "done").length, [steps]);
   const speakText = useMemo(() => answer.replace(/\*\*/g, ""), [answer]);
-  // 回答产出后，闭集匹配类案库，给出 1~3 条「类案参考」（不靠模型，零幻觉）
+  // 领域外不产生任何类案：后端短路、前端也强制清空，避免挂着不相关的劳动法判例。
+  const outOfDomain = domain?.in_domain === false;
+  // 一旦提问就进入「提问后」形态：领域外短路时回答很短甚至只有提示，
+  // 右栏也必须保持 0 资料，不能因为 answer 为空又跳回首屏的常见争议。
+  const hasAsked = Boolean(lastQuestion);
+  // 回答产出后闭集匹配类案，展示在右侧资料栏（不靠模型，零幻觉）
   const relatedCases = useMemo(
-    () => (answer && lastQuestion ? matchCases(lastQuestion) : []),
-    [answer, lastQuestion]
+    () => (answer && lastQuestion && !outOfDomain ? matchCases(lastQuestion) : []),
+    [answer, lastQuestion, outOfDomain]
   );
 
   /** 每次检索命中都累加进右侧资料栏（去重），只收真实工具返回值 */
@@ -203,6 +216,7 @@ export default function AgentPage() {
     setPlan(null);
     setLaws([]);
     setCitationAudit(null);
+    setDomain(null);
     setLastQuestion(msg);
     setInput(msg);
     setProcessOpen(false);
@@ -217,6 +231,15 @@ export default function AgentPage() {
     try {
       await streamAgent({ message: msg }, (ev: AgentStreamEvent) => {
         switch (ev.event) {
+          case "domain":
+            setDomain({
+              in_domain: ev.in_domain,
+              topic: ev.topic,
+              notice: ev.notice,
+            });
+            // 领域外后端短路，不会推 plan/step，无需展开「执行过程」
+            if (!ev.in_domain) setProcessOpen(false);
+            break;
           case "plan":
             setPlan({ goal: ev.goal, steps: ev.steps });
             break;
@@ -264,7 +287,7 @@ export default function AgentPage() {
     abortRef.current?.abort();
     setInput(""); setSteps([]); setAnswer(""); setError(""); setRounds(0);
     setExpanded(null); setPlan(null); setLaws([]); setCitationAudit(null); setLastQuestion("");
-    setProcessOpen(false); setLoading(false);
+    setDomain(null); setProcessOpen(false); setLoading(false);
   }, []);
 
   const askExample = useCallback((q: string) => { void run(q); }, [run]);
@@ -326,6 +349,38 @@ export default function AgentPage() {
               <div className="mb-5 flex justify-end">
                 <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-brand px-4 py-2.5 text-[13px] leading-relaxed text-white">
                   {lastQuestion}
+                </div>
+              </div>
+            )}
+
+            {/* 领域边界提示：必须在回答之前出现，明确说明「这不是劳动关系领域」 */}
+            {outOfDomain && (
+              <div className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                <div className="flex items-start gap-2.5">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-200 text-[13px] font-semibold text-amber-800">
+                    !
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[14px] font-semibold text-amber-900">
+                      这个问题不属于劳动关系领域
+                      {domain?.topic && (
+                        <span className="ml-1.5 rounded-md bg-amber-200/70 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 align-middle">
+                          识别为「{domain.topic}」
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-2 text-[12.5px] leading-relaxed text-amber-800">
+                      {domain?.notice ||
+                        "本助手只覆盖劳动关系相关的 14 部法规、678 条原文，不对领域外问题提供法律分析、法条引用或类案，也不构成法律意见。"}
+                    </p>
+                    <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-amber-700/90">
+                      <span>本次不检索法条</span>
+                      <span>·</span>
+                      <span>不生成类案</span>
+                      <span>·</span>
+                      <span>不调用计算/审查工具</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -399,59 +454,25 @@ export default function AgentPage() {
             {(answer || (loading && steps.some((s) => s.status === "done"))) && (
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="text-[12px] font-medium text-slate-500">回答</div>
+                  <div className="text-[12px] font-medium text-slate-500">
+                    {outOfDomain ? "常识性提示（不构成法律意见）" : "回答"}
+                  </div>
                   {!loading && <SpeakButton text={speakText} />}
                 </div>
-                <StructuredAnswer
-                  text={answer}
-                  streaming={loading}
-                  onLawClick={() => setPanelOpen(true)}
-                  verifiedArticles={laws.map((l) => l.article)}
-                />
-
-                {/* 类案参考：闭集匹配，随回答一起给出相似判例，对标「得理法搜」的同类案例区 */}
-                {!loading && relatedCases.length > 0 && (
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="rounded-md bg-sky-100 px-1.5 py-0.5 text-[11px] font-medium text-sky-700">
-                        类案参考
-                      </span>
-                      <span className="text-[13px] font-semibold text-slate-800">
-                        和你情况相似的真实判例
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {relatedCases.map((c) => (
-                        <a
-                          key={c.id}
-                          href={c.sourceUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block rounded-xl border border-white bg-white p-3 transition-colors hover:border-sky-300"
-                        >
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="rounded bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                              {c.category}
-                            </span>
-                            <span className="text-[11px] text-slate-400">
-                              {c.level} · {c.caseNo}
-                            </span>
-                          </div>
-                          <div className="mt-1 line-clamp-1 text-[13px] font-medium text-slate-800">
-                            {c.title}
-                          </div>
-                          <div className="mt-1 text-[11.5px] leading-relaxed text-emerald-700">
-                            {c.result}
-                          </div>
-                          <div className="mt-0.5 text-[10.5px] leading-relaxed text-slate-500">
-                            相似点：{c.similarity}
-                          </div>
-                        </a>
-                      ))}
-                    </div>
+                {/* 领域外只给固定常识性说明，用普通段落，不套「核心结论/法律分析/行动建议」卡片 */}
+                {outOfDomain ? (
+                  <div className="whitespace-pre-line text-[13px] leading-[1.9] text-slate-700">
+                    {answer}
                   </div>
+                ) : (
+                  <StructuredAnswer
+                    text={answer}
+                    streaming={loading}
+                    onLawClick={() => setPanelOpen(true)}
+                    verifiedArticles={laws.map((l) => l.article)}
+                  />
                 )}
-                {loading && !answer && (
+                {loading && !answer && !outOfDomain && (
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="flex items-center gap-2 text-[12px] font-medium text-slate-500">
                       <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
@@ -548,7 +569,16 @@ export default function AgentPage() {
       {/* 右侧相关资料栏 */}
       {panelOpen && (
         <div className="hidden h-[calc(100vh-3.5rem)] w-[330px] shrink-0 lg:block xl:w-[360px]">
-          <RelatedPanel laws={laws} onAsk={askExample} onClose={() => setPanelOpen(false)} />
+          <RelatedPanel
+            laws={laws}
+            onAsk={askExample}
+            onClose={() => setPanelOpen(false)}
+            hasAsked={hasAsked}
+            inDomain={!outOfDomain}
+            topic={domain?.topic ?? ""}
+            question={lastQuestion}
+            relatedCases={relatedCases}
+          />
         </div>
       )}
     </div>

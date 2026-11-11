@@ -8,7 +8,13 @@ const isStaticExport = process.env.STATIC_EXPORT === "1";
 
 const nextConfig: NextConfig = {
   ...(isStaticExport
-    ? { output: "export", trailingSlash: true }
+    ? {
+        output: "export",
+        trailingSlash: true,
+        // 纯静态托管没有 /_next/image 服务端优化路由，必须让 next/image
+        // 直接输出原始图片路径（/hero-*.webp），否则首页两张剪影会 404。
+        images: { unoptimized: true },
+      }
     : { cacheComponents: true, partialPrefetching: true }),
 
   // Next 16 对带内容哈希的 /_next/static 产物默认就是 immutable 强缓存，

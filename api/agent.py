@@ -12,9 +12,15 @@ SSE 事件（前端据此逐条渲染）：
   plan  -> {"goal": "...", "steps": [...]}   模型自主登记的执行计划（复杂任务第一步）
   step  -> {"kind": "thinking"|"tool_call"|"tool_result", "tool", "label", "detail", "args", "result"}
   token -> {"text": "..."}     最终回答逐字流
+  domain -> {"in_domain": bool, "topic": "...", "notice": "..."}
+            进入工具循环之前的领域前置判定结果（见 src/domain_guard.py）
+  step  -> {"kind": "thinking"|"tool_call"|"tool_result", ...}
   done  -> {"tools_used": [...], "rounds": N, "citation_audit": {...}}
             citation_audit 把回答里每个条号与本次检索命中做比对，未命中的公开列出
   error -> {"message": "..."}
+
+领域外的请求在 domain 事件之后直接短路：不进工具循环、不检索法条、
+不生成类案，只给一段固定的边界说明，避免模型把民事纠纷硬套进劳动法框架。
 """
 import json
 import re
@@ -26,6 +32,7 @@ from pydantic import BaseModel
 
 from src.llm import _llm
 from src.tools import TOOL_LABELS, TOOL_SCHEMAS, call_tool
+from src.domain_guard import classify, out_of_domain_reply
 
 import config
 
@@ -43,6 +50,14 @@ calc_compensation（算金额）、review_contract（审合同）、
 draft_arbitration_letter（写仲裁申请书）。
 
 【硬性规则，违反即为错误回答】
+-1. 领域边界（最高优先级）：本助手只处理劳动关系问题（工资、辞退、社保、加班、
+   试用期、竞业限制、工伤、女职工三期、经济补偿、劳动仲裁等）。如果问题明显属于
+   房屋租赁、房产买卖、消费维权、婚姻家庭继承、交通事故、借贷金融、知识产权、
+   治安刑事、医疗损害等其他领域，**不要用「二、法律分析 / 分情形表格 / 三、行动建议」**
+   这套劳动法框架硬套，不要引用任何劳动法条号，不要给出「见上方（一）所述条文」
+   这类指向不存在的引用，也不要假装给出专业行动清单。直接说明该问题不属于
+   劳动关系领域、本助手不作分析、建议咨询对应渠道，并提示不构成法律意见。
+   （后端已做确定性前置判定并短路，本条是第二道兜底，防止边缘问法漏网。）
 0. 需要调用 2 个及以上工具，或需要先查依据再算金额/起草文书的复杂请求，
    **第一步必须调用 plan_tasks** 登记执行计划：写清目标与 2~6 个有序步骤，
    步骤由你自己判断，不要套模板。计划登记完再按计划逐步执行。
@@ -113,6 +128,12 @@ class Step(BaseModel):
 
 def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _chunk(text: str, size: int = 24):
+    """把固定文案切成小段推给前端，保持与真实流式回答一致的渲染节奏。"""
+    for i in range(0, len(text), size):
+        yield text[i:i + size]
 
 
 _TIME_RE = re.compile(r"\d{4}\s*年(?:\s*\d{1,2}\s*月)?|\d{1,2}\s*月")
@@ -210,7 +231,31 @@ def _summarize_result(tool: str, result: dict) -> str:
 
 
 def run_agent_stream(req: AgentRequest) -> Iterator[str]:
-    """工具循环 + 最终回答流式。"""
+    """领域前置判定 → 工具循环 + 最终回答流式。"""
+    # 先把判定结果推给前端：前端据此在回答之前渲染边界提示条，
+    # 并把右侧「法规 / 类案 / 常见争议」全部清零（领域外没有任何可用资料）。
+    verdict = classify(req.message)
+    yield _sse("domain", {
+        "in_domain": verdict.in_domain,
+        "topic": verdict.topic,
+        "notice": verdict.notice,
+        "confidence": verdict.confidence,
+    })
+
+    if not verdict.in_domain:
+        # 短路：完全不进工具循环、不检索法条、不调模型、不生成类案。
+        # 固定文案保证零幻觉，也不会出现「见上方（一）所述条文」这种假引用。
+        reply = out_of_domain_reply(verdict)
+        for piece in _chunk(reply):
+            yield _sse("token", {"text": piece})
+        yield _sse("done", {
+            "tools_used": [],
+            "rounds": 0,
+            "citation_audit": None,
+            "in_domain": False,
+        })
+        return
+
     messages = _build_messages(req)
     tools_used: list[str] = []
     verified_articles: set[str] = set()   # 本次 search_law 实际返回的条号
@@ -333,6 +378,7 @@ def run_agent_stream(req: AgentRequest) -> Iterator[str]:
             "tools_used": tools_used,
             "rounds": rounds,
             "citation_audit": _citation_audit("".join(answer_parts), verified_articles),
+            "in_domain": True,
         })
 
     except Exception as e:  # noqa: BLE001
@@ -356,6 +402,8 @@ def run_agent(req: AgentRequest) -> dict:
     answer_parts: list[str] = []
     tools_used: list[str] = []
     citation_audit: dict = {}
+    in_domain = True
+    topic = ""
     error = None
 
     for raw in run_agent_stream(req):
@@ -368,7 +416,10 @@ def run_agent(req: AgentRequest) -> dict:
         except json.JSONDecodeError:
             continue
 
-        if event == "step":
+        if event == "domain":
+            in_domain = bool(data.get("in_domain", True))
+            topic = data.get("topic", "")
+        elif event == "step":
             if data.get("kind") == "tool_call":
                 steps.append(Step(step=f"调用 {data.get('label')}", detail=""))
             elif data.get("kind") == "tool_result":
@@ -386,6 +437,8 @@ def run_agent(req: AgentRequest) -> dict:
         "tools_used": tools_used,
         "reply": "".join(answer_parts),
         "citation_audit": citation_audit,
+        "in_domain": in_domain,
+        "topic": topic,
         "error": error,
     }
 
@@ -405,5 +458,6 @@ def agent_stream(req: AgentRequest):
 def agent_run(req: AgentRequest):
     """非流式：一次性返回完整过程与回答。"""
     if not req.message.strip():
-        return {"steps": [], "tools_used": [], "reply": "", "error": "消息不能为空"}
+        return {"steps": [], "tools_used": [], "reply": "", "in_domain": True,
+                "topic": "", "error": "消息不能为空"}
     return run_agent(req)
