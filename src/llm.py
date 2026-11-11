@@ -30,7 +30,7 @@ class _LazyClient:
                 label = "EMBED_API_KEY"
             if not key:
                 raise RuntimeError(
-                    f"缺少 {label}：法规问答、合同审查、智能助手需要模型密钥；"
+                    f"缺少 {label}：法规问答、合同审查、劳动者助手需要模型密钥；"
                     "赔偿金计算器与静态页面不依赖密钥，仍可正常使用。"
                 )
             self._client = OpenAI(api_key=key, base_url=base, timeout=120)

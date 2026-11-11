@@ -94,7 +94,7 @@ export function HomeCases({ cases }: { cases: JudgmentCase[] }) {
           ))}
         </div>
         <p className="mt-5 text-center text-[11px] text-white/35">
-          点击卡片可打开原始出处核验 · 更多案例在智能助手页右侧「相关资料 → 类案」中按问检索
+          点击卡片可打开原始出处核验 · 更多案例在劳动者助手页右侧「相关资料 → 类案」中按问检索
         </p>
       </div>
     </section>
