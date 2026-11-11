@@ -1,6 +1,8 @@
 // 后端 API 地址。本地开发用 localhost:8000，部署后通过 NEXT_PUBLIC_API_BASE 注入。
+// 用 ?? 而非 ||：显式注入空字符串时表示「同源」（备用镜像由同一进程托管前后端），
+// 未注入时仍回落本地后端，保证本地开发 / Railway 现有部署行为不变。
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 // ---------- 类型（与后端 pydantic 模型一一对应） ----------
 

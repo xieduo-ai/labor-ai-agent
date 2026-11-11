@@ -1,24 +1,34 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  cacheComponents: true,          // Next 的组件级缓存
-  partialPrefetching: true,       // 路由预取只取需要的部分，减少首屏传输
+// 两种部署共用一份配置：
+//  - 默认（Railway / 本地 dev）：Node 服务，启用组件级缓存与路由预取
+//  - STATIC_EXPORT=1：纯静态导出到 out/，由 FastAPI 单进程同源托管（备用镜像用）
+// 切换成静态导出时必须关掉 cacheComponents / headers()——两者依赖服务端运行时。
+const isStaticExport = process.env.STATIC_EXPORT === "1";
 
-  // 缓存策略说明：Next 16 对带内容哈希的 /_next/static 产物默认就是
-  // immutable 强缓存，这里**不重复覆盖** Cache-Control（自定义会破坏 dev 热更新）；
-  // 组件级缓存走 cacheComponents，路由预取走 partialPrefetching，
-  // 可选语音模块走 next/dynamic 按需分包。页面 HTML 不缓存，保证 SSE 与前端一致。
-  async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        ],
-      },
-    ];
-  },
+const nextConfig: NextConfig = {
+  ...(isStaticExport
+    ? { output: "export", trailingSlash: true }
+    : { cacheComponents: true, partialPrefetching: true }),
+
+  // Next 16 对带内容哈希的 /_next/static 产物默认就是 immutable 强缓存，
+  // 这里不重复覆盖 Cache-Control（自定义会破坏 dev 热更新）。
+  ...(isStaticExport
+    ? {}
+    : {
+        async headers() {
+          return [
+            {
+              source: "/:path*",
+              headers: [
+                { key: "X-Content-Type-Options", value: "nosniff" },
+                { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+              ],
+            },
+          ];
+        },
+      }),
+
   turbopack: {
     rules: {
       "*.css": {

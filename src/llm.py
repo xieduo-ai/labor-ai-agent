@@ -6,8 +6,42 @@ from openai import OpenAI
 
 import config
 
-_llm = OpenAI(api_key=config.LLM_API_KEY, base_url=config.LLM_BASE_URL, timeout=120)
-_emb = OpenAI(api_key=config.EMBED_API_KEY, base_url=config.EMBED_BASE_URL, timeout=120)
+class _LazyClient:
+    """延迟实例化 OpenAI 客户端。
+
+    原先在模块导入时直接 OpenAI(...)，缺密钥会抛 OpenAIError，连带
+    FastAPI 都起不来（静态页 / 计算器也一起挂）。改成首次真正调用时才建，
+    这样无密钥环境下页面与纯规则的计算器仍可正常服务；有密钥时行为不变。
+    变量名 _llm / _emb 保持不变，api/agent.py、src/vision.py 的
+    `from src.llm import _llm` 无需改动。
+    """
+
+    def __init__(self, kind: str):
+        self._kind = kind
+        self._client = None
+
+    def _get(self):
+        if self._client is None:
+            if self._kind == "llm":
+                key, base = config.LLM_API_KEY, config.LLM_BASE_URL
+                label = "LLM_API_KEY"
+            else:
+                key, base = config.EMBED_API_KEY, config.EMBED_BASE_URL
+                label = "EMBED_API_KEY"
+            if not key:
+                raise RuntimeError(
+                    f"缺少 {label}：法规问答、合同审查、智能助手需要模型密钥；"
+                    "赔偿金计算器与静态页面不依赖密钥，仍可正常使用。"
+                )
+            self._client = OpenAI(api_key=key, base_url=base, timeout=120)
+        return self._client
+
+    def __getattr__(self, name):
+        return getattr(self._get(), name)
+
+
+_llm = _LazyClient("llm")
+_emb = _LazyClient("emb")
 
 
 def chat(messages, temperature=0.1, json_mode=False, retries=3):
