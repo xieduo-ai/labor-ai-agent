@@ -144,25 +144,6 @@ export default function Home() {
         </p>
       </section>
 
-      {/* 建议六：首页首屏不动，下方补「其他角色 / 通用法律问题」入口。
-          双栏仍是主视觉，这里承接非劳动者 / 非 HR 的咨询需求，并划清能力边界。 */}
-      <section className="bg-brand py-7">
-        <div className="mx-auto flex max-w-5xl flex-col items-center gap-3 px-4 text-center sm:flex-row sm:justify-between sm:text-left">
-          <div>
-            <div className="text-[15px] font-semibold text-white">不是劳动者，也不是企业 HR？</div>
-            <p className="mt-1 text-[12.5px] text-white/70">
-              其他角色或通用法律问题，也可以来问 —— 本助手聚焦劳动法领域，其余仅作常识性参考。
-            </p>
-          </div>
-          <Link
-            href="/agent"
-            className="shrink-0 rounded-full bg-white px-6 py-2.5 text-[13px] font-medium text-brand transition-transform hover:translate-x-1"
-          >
-            去智能助手提问 →
-          </Link>
-        </div>
-      </section>
-
       {/* 纵向渐变过渡：两端与上下区块同色，不形成横向色带 */}
       <div className="section-seam h-20" aria-hidden="true" />
 
