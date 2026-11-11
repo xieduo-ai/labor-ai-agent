@@ -61,7 +61,7 @@ export default function Home() {
           <div className="dual-panel relative flex-1 overflow-hidden rounded-2xl border border-white/10">
             {/* 左：劳动者 · 黄金橙 */}
             <Link
-              href="/worker/chat"
+              href="/agent"
               className="dual-side group relative block min-h-[340px] bg-[#B86320] md:min-h-0"
             >
               <Image

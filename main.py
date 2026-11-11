@@ -39,6 +39,7 @@ from api.agent import router as agent_router
 from api.review_stream import stream_review, stream_vision_review
 from src.compensation import calc_compensation
 from src.qa import answer
+from src.domain_guard import classify, out_of_domain_reply
 
 app = FastAPI(title="用工合规 AI Agent API", version="2.2.0")
 app.include_router(agent_router)
@@ -69,6 +70,9 @@ class QASource(BaseModel):
 class QAResponse(BaseModel):
     answer: str
     sources: list[QASource]
+    in_domain: bool = True
+    topic: str = ""
+    notice: str = ""
 
 
 class ReviewTextRequest(BaseModel):
@@ -132,14 +136,25 @@ def health():
 
 @app.post("/api/qa", response_model=QAResponse)
 def qa(req: QARequest):
-    """劳动法问答（支持多轮历史）。"""
+    """劳动法问答（支持多轮历史）。领域前置判定与 /api/agent/stream 一致：
+    越界直接短路返回固定边界说明，不检索法条、不调模型、不生成类案。"""
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="问题不能为空")
+    verdict = classify(req.question)
+    if not verdict.in_domain:
+        return QAResponse(
+            answer=out_of_domain_reply(verdict),
+            sources=[],
+            in_domain=False,
+            topic=verdict.topic,
+            notice=verdict.notice,
+        )
     result = answer(req.question, history=req.history)
     return QAResponse(
         answer=result["answer"],
         sources=[QASource(**{k: h.get(k, "") for k in ("law_name", "article_no", "text")})
                  for h in result["sources"]],
+        in_domain=True,
     )
 
 

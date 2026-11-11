@@ -15,6 +15,10 @@ export interface QASource {
 export interface QAResponse {
   answer: string;
   sources: QASource[];
+  /** 领域前置判定结果，与 /api/agent/stream 的 domain 事件对齐 */
+  in_domain?: boolean;
+  topic?: string;
+  notice?: string;
 }
 
 export interface LegalBasis {

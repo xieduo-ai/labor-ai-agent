@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 const NAV = [
   { href: "/", label: "首页" },
   { href: "/agent", label: "智能助手" },
-  { href: "/worker/chat", label: "劳动法问答" },
   { href: "/review", label: "审合同" },
   { href: "/worker/calculator", label: "赔偿计算器" },
 ];

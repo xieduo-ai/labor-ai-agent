@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { errMessage, streamAgent, type AgentStreamEvent, type CitationAudit } from "@/lib/api";
+import { askQA, errMessage, streamAgent, type AgentStreamEvent, type CitationAudit } from "@/lib/api";
 import { AgentPlan } from "@/components/AgentPlan";
 import { StructuredAnswer } from "@/components/StructuredAnswer";
 import { RelatedPanel, type RelatedLaw } from "@/components/RelatedPanel";
@@ -172,6 +172,8 @@ export default function AgentPage() {
   const [processOpen, setProcessOpen] = useState(false);
   const [lastQuestion, setLastQuestion] = useState("");
   const [domain, setDomain] = useState<DomainState | null>(null);
+  // 模式：deep=工具链+资料栏（默认，功能最全）；quick=单次检索快答，不进工具链、不渲染执行过程
+  const [mode, setMode] = useState<"deep" | "quick">("deep");
   const abortRef = useRef<AbortController | null>(null);
 
   const completedCount = useMemo(() => steps.filter((s) => s.status === "done").length, [steps]);
@@ -220,6 +222,29 @@ export default function AgentPage() {
     setLastQuestion(msg);
     setInput(msg);
     setProcessOpen(false);
+
+    // 快速问答：单次检索 + 单次生成，不进工具链，也不渲染「执行过程」时间线。
+    if (mode === "quick") {
+      try {
+        const data = await askQA(msg);
+        setAnswer(data.answer);
+        setLaws(
+          (data.sources ?? []).map((s) => ({
+            law: s.law_name,
+            article: s.article_no,
+            text: s.text ?? "",
+          }))
+        );
+        if (data.in_domain === false) {
+          setDomain({ in_domain: false, topic: data.topic ?? "", notice: data.notice ?? "" });
+        }
+      } catch (e) {
+        setError(errMessage(e));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     const ac = new AbortController();
     abortRef.current = ac;
@@ -281,7 +306,7 @@ export default function AgentPage() {
       setLoading(false);
       abortRef.current = null;
     }
-  }, [collectLaws]);
+  }, [collectLaws, mode]);
 
   const newChat = useCallback(() => {
     abortRef.current?.abort();
@@ -303,7 +328,18 @@ export default function AgentPage() {
             <span className="text-sm leading-none">＋</span> 新建对话
           </button>
           <span className="h-4 w-px bg-slate-200" />
-          <div className="flex-1 text-center text-[13px] font-medium text-slate-800">智能对话</div>
+          <div className="flex flex-1 items-center justify-center">
+            <div className="inline-flex rounded-lg border border-slate-200 p-0.5 text-[12px]">
+              <button onClick={() => setMode("deep")}
+                className={`rounded-md px-2.5 py-1 transition-colors ${mode === "deep" ? "bg-brand text-white" : "text-slate-500 hover:text-brand"}`}>
+                深度分析
+              </button>
+              <button onClick={() => setMode("quick")}
+                className={`rounded-md px-2.5 py-1 transition-colors ${mode === "quick" ? "bg-brand text-white" : "text-slate-500 hover:text-brand"}`}>
+                快速问答
+              </button>
+            </div>
+          </div>
           <span className="hidden text-[11px] text-slate-400 sm:inline">14 部法规 · 678 条原文</span>
           <button onClick={() => setPanelOpen(!panelOpen)}
             className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 hover:border-brand hover:text-brand">
